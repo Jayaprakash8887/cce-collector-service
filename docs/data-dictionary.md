@@ -6,9 +6,9 @@ Consolidated reference for all database tables, columns, enums, CloudEvents fiel
 
 ## 1. Database Tables
 
-### 1.1 `inbound_event` — Raw Request Audit Log
+### 1.1 `inbound_event` — Request Audit Log & Rejection Tracking
 
-Every HTTP request is persisted **as-is** before processing. Used for audit trail and primary deduplication.
+Every HTTP request is persisted **as-is** before processing. Used for audit trail, primary deduplication, and rejection tracking. Rejected events are recorded directly on this table — a separate dead-letter table is not needed.
 
 **Migration:** `V1__create_inbound_event.sql`
 
@@ -27,7 +27,11 @@ Every HTTP request is persisted **as-is** before processing. Used for audit trai
 | `source_event_id` | `VARCHAR` | Yes | — | Source system's internal event ID |
 | `raw_payload` | `JSONB` | No | — | Full original request body (immutable) |
 | `status` | `VARCHAR` | No | `'RECEIVED'` | Processing status (see `InboundStatus` enum) |
-| `rejection_reason` | `VARCHAR` | Yes | — | Rejection reason code (if status = `REJECTED`) |
+| `rejection_reason` | `VARCHAR` | Yes | — | Rejection reason code (if status = `REJECTED`; see `RejectionReason` enum) |
+| `failure_stage` | `VARCHAR` | Yes | — | Pipeline stage where failure occurred (see `FailureStage` enum) |
+| `error_details` | `TEXT` | Yes | — | Stack trace or validation error messages |
+| `resolved` | `BOOLEAN` | No | `false` | Whether a rejected event has been resolved/acknowledged |
+| `resolved_at` | `TIMESTAMPTZ` | Yes | — | Resolution timestamp |
 | `received_at` | `TIMESTAMPTZ` | No | `now()` | Server-side receipt timestamp (UTC) |
 
 **Constraints:**
@@ -42,6 +46,8 @@ Every HTTP request is persisted **as-is** before processing. Used for audit trai
 | `idx_inbound_event_source` | `source` | Source-filtered queries |
 | `idx_inbound_event_status` | `status` | Status-based filtering |
 | `idx_inbound_event_received` | `received_at` | Time-range queries, lookback dedup |
+| `idx_inbound_event_rejection` | `rejection_reason` | Rejection reason queries (WHERE status = 'REJECTED') |
+| `idx_inbound_event_unresolved` | `(status, resolved)` | Unresolved rejected event scans (WHERE status = 'REJECTED' AND resolved = false) |
 
 ---
 
@@ -104,42 +110,6 @@ Each row corresponds to exactly one Kafka message on `cce.events.inbound`. This 
 
 ---
 
-### 1.3 `dead_letter_event` — Rejected/Failed Events
-
-Events that fail validation or Kafka publishing are persisted here for investigation and retry.
-
-**Migration:** `V3__create_dead_letter_event.sql`
-
-| Column | Type | Nullable | Default | Description |
-|--------|------|----------|---------|-------------|
-| `id` | `UUID` | No | `gen_random_uuid()` | Primary key |
-| `inbound_event_id` | `UUID` | Yes | — | FK to `inbound_event.id` (null if deserialization failed before persist) |
-| `cloudevents_id` | `VARCHAR` | Yes | — | CloudEvents `id` (may be null if unparseable) |
-| `source` | `VARCHAR` | Yes | — | CloudEvents `source` |
-| `type` | `VARCHAR` | Yes | — | CloudEvents `type` |
-| `subject` | `VARCHAR` | Yes | — | Patient UPID |
-| `raw_payload` | `JSONB` | No | — | Full original request body |
-| `rejection_reason` | `VARCHAR` | No | — | Reason code (see `RejectionReason` enum) |
-| `failure_stage` | `VARCHAR` | No | — | Pipeline stage where failure occurred (see below) |
-| `error_details` | `TEXT` | Yes | — | Stack trace or validation error messages |
-| `correlation_id` | `VARCHAR` | Yes | — | Correlation ID |
-| `facility_id` | `VARCHAR` | Yes | — | Healthcare facility FOSA ID |
-| `received_at` | `TIMESTAMPTZ` | No | `now()` | Timestamp |
-| `retry_count` | `INTEGER` | No | `0` | Number of retry attempts |
-| `next_retry_at` | `TIMESTAMPTZ` | Yes | — | Scheduled next retry time |
-| `resolved` | `BOOLEAN` | No | `false` | Whether the dead letter has been resolved |
-| `resolved_at` | `TIMESTAMPTZ` | Yes | — | Resolution timestamp |
-
-**Indexes:**
-| Index | Columns | Condition | Purpose |
-|-------|---------|-----------|---------|
-| `idx_dead_letter_reason` | `rejection_reason` | — | Reason-based queries |
-| `idx_dead_letter_source` | `source` | — | Source-filtered queries |
-| `idx_dead_letter_received` | `received_at` | — | Time-range queries |
-| `idx_dead_letter_unresolved` | `next_retry_at` | `resolved = false` | Retry queue scan |
-
----
-
 ## 2. Enum Values
 
 ### 2.1 `InboundStatus`
@@ -165,7 +135,7 @@ Kafka publish state of an `event_log` record (outbox pattern).
 
 ### 2.3 `RejectionReason`
 
-Reason an event was rejected and dead-lettered.
+Reason an event was rejected (stored on `inbound_event.rejection_reason`).
 
 | Value | Failure Stage | Description |
 |-------|---------------|-------------|
@@ -180,9 +150,9 @@ Reason an event was rejected and dead-lettered.
 | `DESERIALIZATION_ERROR` | `VALIDATION` | Request body could not be parsed as JSON |
 | `KAFKA_PUBLISH_FAILURE` | `KAFKA_PUBLISH` | Kafka broker unavailable or publish timed out |
 
-### 2.4 `failure_stage`
+### 2.4 `FailureStage`
 
-Pipeline stage where the failure occurred (CHECK constraint on `dead_letter_event`).
+Pipeline stage where the failure occurred (stored on `inbound_event.failure_stage`).
 
 | Value | Description |
 |-------|-------------|
@@ -325,6 +295,5 @@ The Collector accepts any valid FHIR R4 resource. These are the resource types c
 
 | Version | File | Description |
 |---------|------|-------------|
-| V1 | `V1__create_inbound_event.sql` | `inbound_event` table with dedup unique constraint |
+| V1 | `V1__create_inbound_event.sql` | `inbound_event` table with dedup constraint + rejection tracking columns |
 | V2 | `V2__create_event_log.sql` | `event_log` table, partitioned by month (Jan–Jun 2026) |
-| V3 | `V3__create_dead_letter_event.sql` | `dead_letter_event` table with retry support |

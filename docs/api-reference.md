@@ -124,11 +124,11 @@ Ingest a single CloudEvents-formatted clinical event.
 
 ---
 
-## 2. Dead Letter Management
+## 2. Rejected Event Management
 
-### GET /v1/dead-letters
+### GET /v1/events/rejected
 
-List dead-letter events with pagination.
+List rejected events with pagination. Queries `inbound_event` where `status = 'REJECTED'`.
 
 #### Query Parameters
 
@@ -136,6 +136,8 @@ List dead-letter events with pagination.
 |-----------|------|---------|-------------|
 | `page` | `int` | `0` | Page number (zero-based) |
 | `size` | `int` | `20` | Page size |
+| `rejectionReason` | `string` | — | Filter by rejection reason (e.g., `INVALID_FHIR`) |
+| `resolved` | `boolean` | — | Filter by resolution status |
 
 #### Response
 
@@ -144,16 +146,15 @@ List dead-letter events with pagination.
   "data": {
     "content": [
       {
-        "id": "uuid-deadletter-001",
+        "id": "uuid-inbound-001",
         "cloudEventsId": "evt-bad-001",
         "source": "ebuzima/kigali-south",
         "eventType": "cce.encounter.created",
         "rejectionReason": "INVALID_FHIR",
         "failureStage": "VALIDATION",
-        "errorMessage": "Unable to parse FHIR resource",
-        "retryCount": 0,
+        "errorDetails": "Unable to parse FHIR resource",
         "resolved": false,
-        "createdAt": "2025-01-15T09:30:05Z"
+        "receivedAt": "2025-01-15T09:30:05Z"
       }
     ],
     "totalElements": 1,
@@ -164,17 +165,17 @@ List dead-letter events with pagination.
 }
 ```
 
-### GET /v1/dead-letters/{id}
+### GET /v1/events/rejected/{id}
 
-Retrieve a single dead-letter event by ID.
+Retrieve a single rejected event by `inbound_event` ID.
 
 #### Response
 
 Same structure as individual item in the list response.
 
-### POST /v1/dead-letters/{id}/retry
+### POST /v1/events/rejected/{id}/retry
 
-Retry processing a dead-letter event.
+Retry processing a rejected event. Re-runs the validation pipeline on the original `raw_payload`.
 
 #### Response
 
@@ -183,12 +184,14 @@ Retry processing a dead-letter event.
 ```json
 {
   "data": {
-    "id": "uuid-deadletter-001",
-    "status": "retrying",
-    "retryCount": 1
+    "id": "uuid-inbound-001",
+    "status": "ACCEPTED",
+    "message": "Event reprocessed successfully"
   }
 }
 ```
+
+**422 Unprocessable Entity** — if revalidation still fails, returns updated error details.
 
 ---
 

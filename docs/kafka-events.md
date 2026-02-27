@@ -18,15 +18,17 @@ Detailed reference for all Kafka topics, message schemas, publishing contracts, 
 | **Guarantees** | Exactly-once semantics (idempotent producer + outbox pattern) |
 | **Ordering** | Per-patient ordering within a partition (key = patient UPID) |
 
-### 1.2 `cce.deadletter` — Dead Letter Topic
+### 1.2 `cce.deadletter` — Rejected Event Monitoring Topic (Optional)
 
 | Property | Value |
 |----------|-------|
 | **Topic** | `cce.deadletter` |
 | **Direction** | Produced by Collector (optional, for Kafka-based monitoring) |
 | **Message Key** | `subject` (patient UPID, if available) |
-| **Message Value** | Dead letter event JSON |
+| **Message Value** | Rejected event summary JSON |
 | **Purpose** | Downstream alerting/monitoring of rejected events |
+
+> **Note:** The primary rejection record is stored in `inbound_event` (with `status = REJECTED`, `rejection_reason`, `failure_stage`, and `error_details`). Publishing to `cce.deadletter` is optional and intended for external monitoring systems that consume Kafka rather than query the database.
 
 ---
 
@@ -123,7 +125,7 @@ HTTP Request → PostgreSQL (event_log, publish_status=PENDING) → Kafka Publis
 1. Validated event is persisted to `event_log` with `publish_status = 'PENDING'`
 2. `EventPublisher.publish()` sends the message to Kafka
 3. On success: `publish_status` → `PUBLISHED`, Kafka metadata recorded (`kafka_topic`, `kafka_partition`, `kafka_offset`, `published_at`)
-4. On failure: `publish_status` → `FAILED`, dead letter created
+4. On failure: `publish_status` → `FAILED`, rejection recorded on `inbound_event`
 5. A scheduled retry (`@Scheduled`) scans for `PENDING`/`FAILED` records and retries
 
 ### Retry Configuration

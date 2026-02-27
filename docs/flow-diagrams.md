@@ -10,31 +10,31 @@ Visual diagrams of the Collector Service's processing flows using Mermaid.
 flowchart TD
     A[HTTP POST /v1/events] --> B{CloudEvents<br/>Envelope Valid?}
     B -->|No| C[400 Bad Request]
-    C --> C1[Dead Letter<br/>INVALID_ENVELOPE]
+    C --> C1[Update inbound_event<br/>status: REJECTED<br/>reason: INVALID_ENVELOPE]
     B -->|Yes| D{Duplicate?<br/>source + id in<br/>lookback window}
     D -->|Yes| E[200 OK<br/>status: duplicate]
     D -->|No| F[Persist to<br/>inbound_event<br/>status: RECEIVED]
     F --> G1{Event Type<br/>matches<br/>org.openphc.cce.*?}
     G1 -->|No| G1a[400 Bad Request]
-    G1a --> G1b[Dead Letter<br/>INVALID_EVENT_TYPE]
+    G1a --> G1b[Update inbound_event<br/>status: REJECTED<br/>reason: INVALID_EVENT_TYPE]
     G1 -->|Yes| G2[Apply Defaults<br/>• generate correlationId if absent<br/>• fill time if absent]
     G2 --> H0{datacontenttype?}
     H0 -->|application/fhir+json<br/>or absent| H{FHIR Payload<br/>Valid?}
     H0 -->|application/json| H3{Valid JSON<br/>Object?}
     H0 -->|other| H4[400 Bad Request]
-    H4 --> H4a[Dead Letter<br/>UNSUPPORTED_CONTENT_TYPE]
+    H4 --> H4a[Update inbound_event<br/>status: REJECTED<br/>reason: UNSUPPORTED_CONTENT_TYPE]
     H3 -->|No| H3a[422 Unprocessable]
     H3a --> H3b[Update inbound_event<br/>status: REJECTED]
-    H3b --> H3c[Dead Letter<br/>INVALID_JSON]
+    H3b --> H3c[Update inbound_event<br/>status: REJECTED<br/>reason: INVALID_JSON]
     H3 -->|Yes| J[Update inbound_event<br/>status: ACCEPTED]
     H -->|No| I[422 Unprocessable]
     I --> I1[Update inbound_event<br/>status: REJECTED]
-    I1 --> I2[Dead Letter<br/>INVALID_FHIR]
+    I1 --> I2[Update inbound_event<br/>status: REJECTED<br/>reason: INVALID_FHIR]
     H -->|Yes| J[Update inbound_event<br/>status: ACCEPTED]
     J --> K[Persist to event_log<br/>publish_status: PENDING]
     K --> L{Kafka Publish<br/>Successful?}
     L -->|Yes| M[Update event_log<br/>publish_status: PUBLISHED<br/>+ kafka metadata]
-    L -->|No| N[Dead Letter<br/>KAFKA_PUBLISH_FAILURE<br/>event_log stays PENDING]
+    L -->|No| N[event_log stays PENDING<br/>KAFKA_PUBLISH_FAILURE<br/>optionally → cce.deadletter topic]
     M --> O[200 OK<br/>Ingestion Receipt]
     N --> O
 
@@ -120,7 +120,7 @@ sequenceDiagram
     participant TypeValidator as EventTypeValidator
     participant Defaults as EventDefaultsEnricher
     participant FHIR as FhirPayloadValidator
-    participant DL as DeadLetterService
+    participant RS as RejectionService
 
     Client->>Controller: POST /v1/events (invalid FHIR data)
     Controller->>Validator: validate(request)
@@ -138,8 +138,8 @@ sequenceDiagram
     Controller->>FHIR: validate(request)
     FHIR-->>Controller: ✗ FhirValidationException
 
-    Controller->>Repo: save(inboundEvent, status=REJECTED)
-    Controller->>DL: persistValidationFailure(INVALID_FHIR)
+    Controller->>Repo: save(inboundEvent, status=REJECTED, reason=INVALID_FHIR)
+    Controller->>RS: recordRejection(inboundEvent, INVALID_FHIR, errorDetails)
 
     Controller-->>Client: 422 Unprocessable Entity {error details}
 ```
@@ -214,7 +214,7 @@ flowchart LR
     subgraph CCE["CCE Platform"]
         GW[CCE Gateway<br/>auth + routing]
         CS[Collector Service<br/>validate → dedup<br/>→ publish]
-        PG[(PostgreSQL<br/>inbound_event<br/>event_log<br/>dead_letter_event)]
+        PG[(PostgreSQL<br/>inbound_event<br/>event_log)]
         KF[Kafka<br/>cce.events.inbound]
         COMP[Compliance Service]
     end
@@ -248,6 +248,10 @@ erDiagram
         VARCHAR subject
         JSONB raw_payload
         VARCHAR status
+        VARCHAR rejection_reason
+        VARCHAR failure_stage
+        TEXT error_details
+        BOOLEAN resolved
         TIMESTAMPTZ received_at
     }
 
@@ -266,19 +270,7 @@ erDiagram
         TIMESTAMPTZ received_at
     }
 
-    dead_letter_event {
-        UUID id PK
-        UUID inbound_event_id FK
-        VARCHAR cloudevents_id
-        VARCHAR source
-        JSONB raw_payload
-        VARCHAR rejection_reason
-        VARCHAR failure_stage
-        BOOLEAN resolved
-    }
-
     inbound_event ||--o| event_log : "accepted events"
-    inbound_event ||--o{ dead_letter_event : "rejected/failed events"
 ```
 
 ---

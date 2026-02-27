@@ -114,7 +114,7 @@ All configuration can be overridden via environment variables using Spring Boot'
 | `CCE_COLLECTOR_FHIR_STRICT_VALIDATION` | `false` | Enable strict FHIR validation |
 | `CCE_COLLECTOR_DEDUP_LOOKBACK_DAYS` | `30` | Dedup lookback window (days) |
 | `CCE_COLLECTOR_KAFKA_TOPICS_INBOUND` | `cce.events.inbound` | Inbound events topic |
-| `CCE_COLLECTOR_KAFKA_TOPICS_DEAD_LETTER` | `cce.deadletter` | Dead letter topic |
+| `CCE_COLLECTOR_KAFKA_TOPICS_DEAD_LETTER` | `cce.deadletter` | Rejected event monitoring topic (optional) |
 | `CCE_COLLECTOR_OUTBOX_RETRY_INTERVAL_MS` | `30000` | Outbox retry schedule |
 | `CCE_COLLECTOR_OUTBOX_MAX_RETRY_BATCH_SIZE` | `100` | Max events per retry cycle |
 
@@ -154,9 +154,8 @@ Flyway runs automatically on startup. Migrations are located in `src/main/resour
 
 | Migration | Description |
 |-----------|-------------|
-| `V1__create_inbound_event.sql` | `inbound_event` table with dedup constraint |
+| `V1__create_inbound_event.sql` | `inbound_event` table with dedup constraint and rejection tracking columns |
 | `V2__create_event_log.sql` | `event_log` table, partitioned by month (Jan–Jun 2026) |
-| `V3__create_dead_letter_event.sql` | `dead_letter_event` table with retry support |
 
 ### Manual Migration Execution
 
@@ -299,7 +298,7 @@ kafka-topics.sh --create \
   --replication-factor 3 \
   --bootstrap-server kafka:9092
 
-# Dead letter topic (3 partitions, replication factor 3)
+# Rejected event monitoring topic (optional, 3 partitions, replication factor 3)
 kafka-topics.sh --create \
   --topic cce.deadletter \
   --partitions 3 \
@@ -328,5 +327,5 @@ kafka-topics.sh --create \
 - [ ] Monitoring: Expose `/actuator/prometheus` to Prometheus scraper
 - [ ] Logging: Configure log aggregation (ELK/Loki) — JSON structured output enabled by default
 - [ ] TLS: Terminate TLS at load balancer or ingress controller
-- [ ] Backups: Schedule PostgreSQL pg_dump for `inbound_event` and `dead_letter_event`
+- [ ] Backups: Schedule PostgreSQL pg_dump for `inbound_event` and `event_log`
 - [ ] Partitions: Pre-create `event_log` partitions for upcoming months

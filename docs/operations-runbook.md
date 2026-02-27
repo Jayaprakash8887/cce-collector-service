@@ -103,13 +103,13 @@ groups:
           summary: "Kafka publish failures detected"
           description: "Events failing to publish to Kafka. Check broker connectivity."
 
-      - alert: DeadLetterBacklog
-        expr: cce_dead_letter_unresolved_total > 100
+      - alert: RejectedEventBacklog
+        expr: cce_rejected_events_unresolved_total > 100
         for: 10m
         labels:
           severity: warning
         annotations:
-          summary: "Dead letter queue backlog growing"
+          summary: "Unresolved rejected event backlog growing"
 
       - alert: DBConnectionPoolExhausted
         expr: hikaricp_connections_pending > 0
@@ -129,26 +129,26 @@ Recommended panels for a Collector Service dashboard:
 3. **Duplicate rate** — `rate(cce_events_duplicated_total[1m]) / rate(cce_events_received_total[1m])`
 4. **P95 ingestion latency** — `histogram_quantile(0.95, rate(http_server_requests_seconds_bucket{uri="/v1/events"}[5m]))`
 5. **Kafka publish latency** — `histogram_quantile(0.95, rate(cce_kafka_publish_seconds_bucket[5m]))`
-6. **Dead letter backlog** — `cce_dead_letter_unresolved_total`
+6. **Rejected event backlog** — `cce_rejected_events_unresolved_total`
 7. **DB connection pool** — `hikaricp_connections_active` vs `hikaricp_connections_idle`
 8. **Outbox pending** — `cce_outbox_pending_total`
 
 ---
 
-## 3. Dead Letter Management
+## 3. Rejected Event Management
 
 ### Overview
 
-Dead-letter events are events that failed validation or processing. They are stored in the `dead_letter_event` table and optionally published to the `cce.deadletter` Kafka topic.
+Rejected events are events that failed validation or processing. They are tracked in the `inbound_event` table with `status = 'REJECTED'`, along with `rejection_reason`, `failure_stage`, `error_details`, and `resolved` columns. Optionally, a summary is also published to the `cce.deadletter` Kafka topic for external monitoring.
 
-### Querying Dead Letters
+### Querying Rejected Events
 
 ```bash
-# List recent dead letters (paginated)
-curl "http://localhost:8080/v1/dead-letters?page=0&size=20" | jq .
+# List recent rejected events (paginated)
+curl "http://localhost:8080/v1/events/rejected?page=0&size=20" | jq .
 
-# Get a specific dead letter
-curl "http://localhost:8080/v1/dead-letters/{id}" | jq .
+# Get a specific rejected event
+curl "http://localhost:8080/v1/events/rejected/{id}" | jq .
 ```
 
 ### Direct Database Query
@@ -156,43 +156,44 @@ curl "http://localhost:8080/v1/dead-letters/{id}" | jq .
 ```sql
 -- Count by rejection reason
 SELECT rejection_reason, COUNT(*) 
-FROM dead_letter_event 
-WHERE resolved = false 
+FROM inbound_event 
+WHERE status = 'REJECTED' AND resolved = false 
 GROUP BY rejection_reason 
 ORDER BY count DESC;
 
 -- Recent failures
-SELECT id, cloudevents_id, source, rejection_reason, error_message, created_at
-FROM dead_letter_event 
-WHERE resolved = false 
-ORDER BY created_at DESC 
+SELECT id, cloudevents_id, source, rejection_reason, failure_stage, error_details, received_at
+FROM inbound_event 
+WHERE status = 'REJECTED' AND resolved = false 
+ORDER BY received_at DESC 
 LIMIT 20;
 
 -- Failures by source
 SELECT source, COUNT(*) 
-FROM dead_letter_event 
-WHERE resolved = false 
-  AND created_at > NOW() - INTERVAL '24 hours'
+FROM inbound_event 
+WHERE status = 'REJECTED' AND resolved = false
+  AND received_at > NOW() - INTERVAL '24 hours'
 GROUP BY source 
 ORDER BY count DESC;
 ```
 
-### Retry Dead Letters
+### Retry Rejected Events
 
 ```bash
-# Retry a specific dead-letter event
-curl -X POST "http://localhost:8080/v1/dead-letters/{id}/retry"
+# Retry a specific rejected event
+curl -X POST "http://localhost:8080/v1/events/rejected/{id}/retry"
 ```
 
 ### Batch Resolution (SQL)
 
 ```sql
--- Mark old dead letters as resolved (e.g., after source system is fixed)
-UPDATE dead_letter_event 
+-- Mark old rejected events as resolved (e.g., after source system is fixed)
+UPDATE inbound_event 
 SET resolved = true, resolved_at = NOW()
 WHERE source = 'ebuzima/broken-facility' 
+  AND status = 'REJECTED'
   AND resolved = false 
-  AND created_at < NOW() - INTERVAL '7 days';
+  AND received_at < NOW() - INTERVAL '7 days';
 ```
 
 ### Rejection Reasons
@@ -205,7 +206,7 @@ WHERE source = 'ebuzima/broken-facility'
 | `INVALID_FHIR` | FHIR R4 payload cannot be parsed | Fix FHIR resource in source system |
 | `KAFKA_PUBLISH_FAILED` | Kafka broker unreachable | Check Kafka cluster health |
 | `PROCESSING_ERROR` | Unexpected error during processing | Check application logs |
-| `DUPLICATE` | Not typically dead-lettered — handled as idempotent | N/A |
+| `DUPLICATE` | Not rejected — handled as idempotent | N/A |
 
 ---
 
@@ -217,7 +218,7 @@ The `event_log` table serves as a transactional outbox. Events that fail initial
 
 - **Retry interval:** Every 30 seconds (configurable: `cce.collector.outbox.retry-interval-ms`)
 - **Batch size:** 100 events per retry cycle (configurable: `cce.collector.outbox.max-retry-batch-size`)
-- **Max retries:** 5 (after which event moves to `FAILED` permanently + dead-lettered)
+- **Max retries:** 5 (after which event moves to `FAILED` permanently and is marked `REJECTED` in `inbound_event`)
 
 ### Monitoring Outbox Backlog
 
@@ -268,7 +269,7 @@ CREATE TABLE event_log_y2026m09 PARTITION OF event_log
   FOR VALUES FROM ('2026-09-01') TO ('2026-10-01');
 ```
 
-> **Failure mode:** If a partition doesn't exist for the current month, inserts to `event_log` will fail with `ERROR: no partition of relation "event_log" found for row`. Events will be persisted in `inbound_event` and dead-lettered.
+> **Failure mode:** If a partition doesn't exist for the current month, inserts to `event_log` will fail with `ERROR: no partition of relation "event_log" found for row`. Events will be persisted in `inbound_event` and marked as `REJECTED` with reason `PROCESSING_ERROR`.
 
 ### Table Size Monitoring
 
@@ -279,7 +280,7 @@ SELECT
   pg_size_pretty(pg_relation_size(oid)) AS data_size,
   pg_size_pretty(pg_indexes_size(oid)) AS index_size
 FROM pg_class
-WHERE relname IN ('inbound_event', 'event_log', 'dead_letter_event')
+WHERE relname IN ('inbound_event', 'event_log')
 ORDER BY pg_total_relation_size(oid) DESC;
 ```
 
@@ -311,7 +312,7 @@ DELETE FROM inbound_event WHERE received_at < NOW() - INTERVAL '90 days';
    ORDER BY received_at DESC;
    ```
 2. If `publish_status = PENDING` → Kafka connectivity issue, check outbox retry logs
-3. If `publish_status = FAILED` → Check `dead_letter_event` for error details
+3. If `publish_status = FAILED` → Check `inbound_event` for rejection details: `SELECT rejection_reason, error_details FROM inbound_event WHERE cloudevents_id = 'evt-xxx';`
 4. Check application logs for Kafka errors:
    ```bash
    grep "KafkaPublishException\|kafka.*error\|ProducerFencedException" /var/log/cce-collector.log
@@ -338,12 +339,12 @@ DELETE FROM inbound_event WHERE received_at < NOW() - INTERVAL '90 days';
 
 **Symptoms:** Events rejected with `INVALID_FHIR` reason.
 
-1. Check dead letter for error details:
+1. Check rejected events for error details:
    ```sql
-   SELECT cloudevents_id, source, error_message, raw_payload
-   FROM dead_letter_event 
-   WHERE rejection_reason = 'INVALID_FHIR' 
-   ORDER BY created_at DESC 
+   SELECT cloudevents_id, source, rejection_reason, error_details, raw_payload
+   FROM inbound_event 
+   WHERE status = 'REJECTED' AND rejection_reason = 'INVALID_FHIR' 
+   ORDER BY received_at DESC 
    LIMIT 10;
    ```
 2. Common causes:
@@ -421,8 +422,8 @@ logger:"InboundEventProducer" AND level:"ERROR"
 # Trace a specific event
 correlationId:"corr-abc123"
 
-# Dead letter creation
-logger:"DeadLetterService" AND message:"Dead letter"
+# Rejection tracking
+logger:"RejectionService" AND message:"rejected"
 ```
 
 ### MDC Fields
