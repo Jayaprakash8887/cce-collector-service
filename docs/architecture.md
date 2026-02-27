@@ -196,7 +196,6 @@ inbound_event  1 ──── 0..1  event_log          (inbound_event_id FK)
 |-----------|-------|---------|
 | `UNIQUE(cloudevents_id, source)` | `inbound_event` | Primary dedup |
 | `UNIQUE(cloudevents_id, source)` | `event_log` | Authoritative dedup |
-| `UNIQUE(source, source_event_id) WHERE source_event_id IS NOT NULL` | `event_log` | Secondary dedup |
 
 ## 8. Deduplication Strategy
 

@@ -84,12 +84,10 @@ Each row corresponds to exactly one Kafka message on `cce.events.inbound`. This 
 
 **Constraints:**
 - `UNIQUE`: `(cloudevents_id, source, received_at)` — authoritative dedup (includes partition key)
-- `UNIQUE (conditional)`: `(source, source_event_id, received_at)` WHERE `source_event_id IS NOT NULL` — secondary idempotency
 
 **Indexes:**
 | Index | Columns | Condition | Purpose |
 |-------|---------|-----------|---------|
-| `idx_event_log_source_sourceeventid` | `(source, source_event_id, received_at)` | `source_event_id IS NOT NULL` | Secondary dedup |
 | `idx_event_log_subject` | `subject` | — | Patient-scoped queries |
 | `idx_event_log_type` | `type` | — | Event type queries |
 | `idx_event_log_correlation` | `correlation_id` | — | Distributed tracing |
