@@ -171,7 +171,9 @@ Reason an event was rejected and dead-lettered.
 |-------|---------------|-------------|
 | `INVALID_ENVELOPE` | `VALIDATION` | Missing or invalid CloudEvents required fields |
 | `INVALID_EVENT_TYPE` | `VALIDATION` | `type` does not match required `org.openphc.cce.<resource>` pattern |
-| `INVALID_FHIR` | `VALIDATION` | FHIR R4 payload failed structural validation |
+| `INVALID_FHIR` | `VALIDATION` | FHIR R4 payload failed structural validation (only when `datacontenttype` = `application/fhir+json`) |
+| `INVALID_JSON` | `VALIDATION` | Non-FHIR JSON payload is not valid JSON or is empty (when `datacontenttype` = `application/json`) |
+| `UNSUPPORTED_CONTENT_TYPE` | `VALIDATION` | `datacontenttype` is not `application/fhir+json` or `application/json` |
 | `DUPLICATE` | `PROCESSING` | Duplicate `(id, source)` detected within lookback window |
 | `MISSING_SUBJECT` | `VALIDATION` | `subject` field missing (required by CCE for patient routing) |
 | `PAYLOAD_TOO_LARGE` | `VALIDATION` | Request body exceeds `max-payload-size` (default 1 MB) |
@@ -184,7 +186,7 @@ Pipeline stage where the failure occurred (CHECK constraint on `dead_letter_even
 
 | Value | Description |
 |-------|-------------|
-| `VALIDATION` | CloudEvents envelope or FHIR payload validation |
+| `VALIDATION` | CloudEvents envelope, event type, or payload validation |
 | `PROCESSING` | Deduplication or persistence |
 | `KAFKA_PUBLISH` | Kafka producer send failure |
 
@@ -203,14 +205,14 @@ Inbound requests use **lowercase** field names per the CloudEvents v1.0 specific
 | `source` | `string` | Non-empty URI or short identifier | `"rhie-mediator"` |
 | `type` | `string` | Non-empty, must match `org.openphc.cce.<resource>` (rejected otherwise) | `"org.openphc.cce.encounter"` |
 | `subject` | `string` | Non-empty patient UPID | `"260225-0002-5501"` |
-| `data` | `object` | Valid JSON; if FHIR, must parse via HAPI | `{ "resourceType": "Encounter", ... }` |
+| `data` | `object` | Valid JSON; FHIR validation applied only when `datacontenttype` = `application/fhir+json` | `{ "resourceType": "Encounter", ... }` |
 
 ### 3.2 Recommended Fields
 
 | Field | Type | Default if Absent | Example |
 |-------|------|-------------------|---------|
 | `time` | `string` | Server `received_at` | `"2026-02-25T08:00:00Z"` |
-| `datacontenttype` | `string` | `"application/fhir+json"` | `"application/fhir+json"` |
+| `datacontenttype` | `string` | `"application/fhir+json"` | `"application/fhir+json"` or `"application/json"` |
 | `facilityid` | `string` | — | `"0002"` |
 | `correlationid` | `string` | Generated `corr-<uuid>` | `"corr-1343872c-636d-506f-b041-1e571d426932"` |
 

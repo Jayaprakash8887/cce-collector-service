@@ -155,11 +155,17 @@ org.openphc.cce.collector/
  6. Apply Server-Side Defaults
     a. Generate correlationid if absent (UUID with "corr-" prefix)
     b. Fill time with server received_at if absent
- 7. FHIR Payload Validation (if datacontenttype = application/fhir+json)
-    a. Parse data via HAPI FHIR
-    b. Validate resourceType is present and parseable
-    c. Cross-check subject reference (warning only)
-    d. If invalid → status = 'REJECTED', dead-letter, return 422
+ 7. Payload Validation
+    a. If datacontenttype = application/fhir+json (or absent — default):
+       i.   Parse data via HAPI FHIR
+       ii.  Validate resourceType is present and parseable
+       iii. Cross-check subject reference (warning only)
+       iv.  If invalid → status = 'REJECTED', dead-letter (INVALID_FHIR), return 422
+    b. If datacontenttype = application/json (non-FHIR):
+       i.   Validate data is valid JSON
+       ii.  If invalid → status = 'REJECTED', dead-letter (INVALID_JSON), return 422
+       iii. No FHIR-specific validation is performed
+    c. Other datacontenttype values → status = 'REJECTED', dead-letter (UNSUPPORTED_CONTENT_TYPE), return 400
  8. Update inbound_event.status = 'ACCEPTED'
  9. Persist validated event to event_log (publish_status = 'PENDING')
 10. Publish event_log record to Kafka
@@ -254,16 +260,35 @@ The inbound HTTP request uses **lowercase** per CloudEvents spec. The Kafka mess
 | `protocoldefinitionid` | `protocolDefinitionId` |
 | `actionid` | `actionId` |
 
-## 11. FHIR Handling
+## 11. Payload Handling
 
-### Strategy: Structural Validation Only
+The Collector supports two `datacontenttype` values, determining the level of payload validation applied:
+
+### `application/fhir+json` (default)
+
+FHIR R4 structural validation via HAPI FHIR.
 
 | Check | Level | Action on Failure |
 |-------|-------|-------------------|
-| `data` parses as valid JSON | Required | Reject (`invalid_fhir`) |
-| `data.resourceType` present and non-empty | Required | Reject (`invalid_fhir`) |
-| HAPI FHIR can parse into `IBaseResource` | Required | Reject (`invalid_fhir`) |
+| `data` parses as valid JSON | Required | Reject (`INVALID_FHIR`) |
+| `data.resourceType` present and non-empty | Required | Reject (`INVALID_FHIR`) |
+| HAPI FHIR can parse into `IBaseResource` | Required | Reject (`INVALID_FHIR`) |
 | `data.subject.reference` matches `subject` | Warning | Accept, log warning |
+
+### `application/json` (non-FHIR)
+
+Non-FHIR JSON payloads are also supported per the CCE solution design. Only basic JSON validity is checked.
+
+| Check | Level | Action on Failure |
+|-------|-------|-------------------|
+| `data` parses as valid JSON | Required | Reject (`INVALID_JSON`) |
+| `data` is a non-empty JSON object | Required | Reject (`INVALID_JSON`) |
+
+No FHIR-specific validation (resourceType, HAPI parsing, subject cross-check) is performed for non-FHIR payloads.
+
+### Unsupported content types
+
+Any `datacontenttype` other than `application/fhir+json` or `application/json` is rejected with `UNSUPPORTED_CONTENT_TYPE`.
 
 ### Supported Resource Types
 
@@ -286,7 +311,7 @@ The Compliance Service consumes `CloudEventMessage` objects from `cce.events.inb
 
 1. **`subject` is always present** — used for patient protocol instance lookup
 2. **`type` follows `org.openphc.cce.<resource>`** — strictly validated (not normalized by the Collector; emitter adaptors must send the correct format)
-3. **`data` contains a valid FHIR R4 resource** — parseable via HAPI FHIR
+3. **`data` contains a valid payload** — FHIR R4 resource (parseable via HAPI FHIR) when `dataContentType` is `application/fhir+json`; valid JSON object when `dataContentType` is `application/json`
 4. **Field names are camelCase** — matching the `CloudEventMessage` Java class
 5. **Kafka key is `subject`** — per-patient ordering
 6. **`correlationId` is always present** — for distributed tracing

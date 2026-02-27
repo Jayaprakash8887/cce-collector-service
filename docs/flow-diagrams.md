@@ -18,7 +18,15 @@ flowchart TD
     G1 -->|No| G1a[400 Bad Request]
     G1a --> G1b[Dead Letter<br/>INVALID_EVENT_TYPE]
     G1 -->|Yes| G2[Apply Defaults<br/>• generate correlationId if absent<br/>• fill time if absent]
-    G2 --> H{FHIR Payload<br/>Valid?}
+    G2 --> H0{datacontenttype?}
+    H0 -->|application/fhir+json<br/>or absent| H{FHIR Payload<br/>Valid?}
+    H0 -->|application/json| H3{Valid JSON<br/>Object?}
+    H0 -->|other| H4[400 Bad Request]
+    H4 --> H4a[Dead Letter<br/>UNSUPPORTED_CONTENT_TYPE]
+    H3 -->|No| H3a[422 Unprocessable]
+    H3a --> H3b[Update inbound_event<br/>status: REJECTED]
+    H3b --> H3c[Dead Letter<br/>INVALID_JSON]
+    H3 -->|Yes| J[Update inbound_event<br/>status: ACCEPTED]
     H -->|No| I[422 Unprocessable]
     I --> I1[Update inbound_event<br/>status: REJECTED]
     I1 --> I2[Dead Letter<br/>INVALID_FHIR]
@@ -40,6 +48,10 @@ flowchart TD
     style N fill:#d9534f,color:#fff
     style G1a fill:#d9534f,color:#fff
     style G1b fill:#d9534f,color:#fff
+    style H4 fill:#d9534f,color:#fff
+    style H4a fill:#d9534f,color:#fff
+    style H3a fill:#d9534f,color:#fff
+    style H3c fill:#d9534f,color:#fff
 ```
 
 ---
