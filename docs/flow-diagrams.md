@@ -31,16 +31,14 @@ flowchart TD
     I --> I1[Update inbound_event<br/>status: REJECTED]
     I1 --> I2[Update inbound_event<br/>status: REJECTED<br/>reason: INVALID_FHIR]
     H -->|Yes| J[Update inbound_event<br/>status: ACCEPTED]
-    J --> K[Persist to event_log<br/>publish_status: PENDING]
-    K --> L{Kafka Publish<br/>Successful?}
-    L -->|Yes| M[Update event_log<br/>publish_status: PUBLISHED<br/>+ kafka metadata]
-    L -->|No| N[event_log stays PENDING<br/>KAFKA_PUBLISH_FAILURE<br/>optionally → cce.deadletter topic]
-    M --> O[200 OK<br/>Ingestion Receipt]
-    N --> O
+    J --> K{Kafka Publish<br/>Successful?}
+    K -->|Yes| L[202 Accepted<br/>Ingestion Receipt]
+    K -->|No| M[Update inbound_event<br/>status: REJECTED<br/>reason: KAFKA_PUBLISH_FAILURE]
+    M --> N[500 Internal Server Error]
 
     style A fill:#4a90d9,color:#fff
     style E fill:#f0ad4e,color:#000
-    style O fill:#5cb85c,color:#fff
+    style L fill:#5cb85c,color:#fff
     style C fill:#d9534f,color:#fff
     style I fill:#d9534f,color:#fff
     style C1 fill:#d9534f,color:#fff
@@ -68,8 +66,6 @@ sequenceDiagram
     participant TypeValidator as EventTypeValidator
     participant Defaults as EventDefaultsEnricher
     participant FHIR as FhirPayloadValidator
-    participant EventLog as EventLogRepository
-    participant Publisher as EventPublisher
     participant Kafka as Kafka Broker
 
     Client->>Controller: POST /v1/events (CloudEvents JSON)
@@ -94,16 +90,10 @@ sequenceDiagram
 
     Controller->>Repo: save(inboundEvent, status=ACCEPTED)
 
-    Controller->>EventLog: save(eventLog, publish_status=PENDING)
-    EventLog-->>Controller: eventLog
+    Controller->>Kafka: send(topic, key=subject, value=CloudEvents JSON)
+    Kafka-->>Controller: RecordMetadata (topic, partition, offset)
 
-    Controller->>Publisher: publish(eventLog)
-    Publisher->>Kafka: send(topic, key=subject, value=CloudEventMessage)
-    Kafka-->>Publisher: RecordMetadata (topic, partition, offset)
-    Publisher->>EventLog: save(publish_status=PUBLISHED, kafka metadata)
-    Publisher-->>Controller: CloudEventMessage
-
-    Controller-->>Client: 200 OK {eventId, status: accepted, correlationId, publishedTopic}
+    Controller-->>Client: 202 Accepted {eventId, status: accepted, correlationId}
 ```
 
 ---
@@ -169,34 +159,7 @@ sequenceDiagram
 
 ---
 
-## 5. Outbox Retry Flow
-
-```mermaid
-flowchart TD
-    A["@Scheduled retryPendingPublishes()<br/>every 30 seconds"] --> B[Query event_log<br/>WHERE publish_status IN<br/>PENDING, FAILED]
-    B --> C{Records<br/>found?}
-    C -->|No| D[Sleep until<br/>next interval]
-    C -->|Yes| E{Age ><br/>max-age?}
-    E -->|Yes| F[Skip record<br/>log warning]
-    E -->|No| G[Publish to Kafka]
-    G --> H{Success?}
-    H -->|Yes| I[Update<br/>publish_status: PUBLISHED<br/>+ kafka metadata]
-    H -->|No| J[Log warning<br/>retry on next cycle]
-    I --> K{More<br/>records?}
-    J --> K
-    F --> K
-    K -->|Yes| E
-    K -->|No| D
-
-    style A fill:#4a90d9,color:#fff
-    style I fill:#5cb85c,color:#fff
-    style F fill:#f0ad4e,color:#000
-    style J fill:#d9534f,color:#fff
-```
-
----
-
-## 6. System Context — Data Flow
+## 5. System Context — Data Flow
 
 ```mermaid
 flowchart LR
@@ -214,7 +177,7 @@ flowchart LR
     subgraph CCE["CCE Platform"]
         GW[CCE Gateway<br/>auth + routing]
         CS[Collector Service<br/>validate → dedup<br/>→ publish]
-        PG[(PostgreSQL<br/>inbound_event<br/>event_log)]
+        PG[(PostgreSQL<br/>inbound_event)]
         KF[Kafka<br/>cce.events.inbound]
         COMP[Compliance Service]
     end
@@ -236,7 +199,7 @@ flowchart LR
 
 ---
 
-## 7. Database Entity Relationships
+## 6. Database Entity
 
 ```mermaid
 erDiagram
@@ -254,28 +217,11 @@ erDiagram
         BOOLEAN resolved
         TIMESTAMPTZ received_at
     }
-
-    event_log {
-        UUID id PK
-        UUID inbound_event_id FK
-        VARCHAR cloudevents_id
-        VARCHAR source
-        VARCHAR subject
-        VARCHAR type
-        JSONB data
-        VARCHAR publish_status
-        VARCHAR kafka_topic
-        INT kafka_partition
-        BIGINT kafka_offset
-        TIMESTAMPTZ received_at
-    }
-
-    inbound_event ||--o| event_log : "accepted events"
 ```
 
 ---
 
-## 8. Field Transformation Pipeline
+## 7. Field Transformation Pipeline
 
 ```mermaid
 flowchart LR
@@ -296,12 +242,12 @@ flowchart LR
         N3["time → server received_at"]
     end
 
-    subgraph Output["Kafka Message (camelCase)"]
-        B1["specVersion: '1.0'"]
+    subgraph Output["Kafka Message (lowercase)"]
+        B1["specversion: '1.0'"]
         B2["type: 'org.openphc.cce.encounter'"]
-        B3["correlationId: 'corr-abc-123'"]
+        B3["correlationid: 'corr-abc-123'"]
         B4["time: '2026-02-25T08:00:00Z'"]
-        B5["facilityId: '0002'"]
+        B5["facilityid: '0002'"]
     end
 
     A1 --> B1

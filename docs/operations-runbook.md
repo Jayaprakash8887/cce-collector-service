@@ -131,7 +131,6 @@ Recommended panels for a Collector Service dashboard:
 5. **Kafka publish latency** — `histogram_quantile(0.95, rate(cce_kafka_publish_seconds_bucket[5m]))`
 6. **Rejected event backlog** — `cce_rejected_events_unresolved_total`
 7. **DB connection pool** — `hikaricp_connections_active` vs `hikaricp_connections_idle`
-8. **Outbox pending** — `cce_outbox_pending_total`
 
 ---
 
@@ -210,66 +209,7 @@ WHERE source = 'ebuzima/broken-facility'
 
 ---
 
-## 4. Outbox Retry Mechanism
-
-### How It Works
-
-The `event_log` table serves as a transactional outbox. Events that fail initial Kafka publish remain in `PENDING` or `FAILED` status and are retried by a scheduled task.
-
-- **Retry interval:** Every 30 seconds (configurable: `cce.collector.outbox.retry-interval-ms`)
-- **Batch size:** 100 events per retry cycle (configurable: `cce.collector.outbox.max-retry-batch-size`)
-- **Max retries:** 5 (after which event moves to `FAILED` permanently and is marked `REJECTED` in `inbound_event`)
-
-### Monitoring Outbox Backlog
-
-```sql
--- Count pending events
-SELECT publish_status, COUNT(*) 
-FROM event_log 
-WHERE publish_status IN ('PENDING', 'FAILED') 
-GROUP BY publish_status;
-
--- Oldest pending event
-SELECT MIN(received_at) AS oldest_pending
-FROM event_log 
-WHERE publish_status = 'PENDING';
-```
-
-### Manual Outbox Drain
-
-If the scheduled publisher is too slow, you can increase the batch size temporarily:
-
-```bash
-# Override via environment variable
-export CCE_COLLECTOR_OUTBOX_MAX_RETRY_BATCH_SIZE=500
-# Restart the application
-```
-
----
-
-## 5. Database Maintenance
-
-### Partition Management
-
-The `event_log` table is partitioned by month. Partitions must be created **before** events arrive for that month.
-
-```sql
--- Check existing partitions
-SELECT inhrelid::regclass AS partition_name
-FROM pg_inherits
-WHERE inhparent = 'event_log'::regclass
-ORDER BY inhrelid::regclass::text;
-
--- Create next quarter's partitions
-CREATE TABLE event_log_y2026m07 PARTITION OF event_log
-  FOR VALUES FROM ('2026-07-01') TO ('2026-08-01');
-CREATE TABLE event_log_y2026m08 PARTITION OF event_log
-  FOR VALUES FROM ('2026-08-01') TO ('2026-09-01');
-CREATE TABLE event_log_y2026m09 PARTITION OF event_log
-  FOR VALUES FROM ('2026-09-01') TO ('2026-10-01');
-```
-
-> **Failure mode:** If a partition doesn't exist for the current month, inserts to `event_log` will fail with `ERROR: no partition of relation "event_log" found for row`. Events will be persisted in `inbound_event` and marked as `REJECTED` with reason `PROCESSING_ERROR`.
+## 4. Database Maintenance
 
 ### Table Size Monitoring
 
@@ -280,42 +220,40 @@ SELECT
   pg_size_pretty(pg_relation_size(oid)) AS data_size,
   pg_size_pretty(pg_indexes_size(oid)) AS index_size
 FROM pg_class
-WHERE relname IN ('inbound_event', 'event_log')
+WHERE relname IN ('inbound_event')
 ORDER BY pg_total_relation_size(oid) DESC;
 ```
 
 ### Archive Old Data
 
 ```sql
--- Archive old event_log partitions (detach, export, drop)
-ALTER TABLE event_log DETACH PARTITION event_log_y2026m01;
--- pg_dump the detached table, then drop
-DROP TABLE event_log_y2026m01;
-
 -- Clean old inbound_event records (keep 90 days)
 DELETE FROM inbound_event WHERE received_at < NOW() - INTERVAL '90 days';
 ```
 
 ---
 
-## 6. Troubleshooting
+## 5. Troubleshooting
 
 ### Event Not Reaching Kafka
 
-**Symptoms:** Event returns 202 but doesn't appear on `cce.events.inbound` topic.
+**Symptoms:** Event returns 500 Internal Server Error.
 
-1. Check `event_log` table:
+1. Check `inbound_event` table:
    ```sql
-   SELECT id, cloudevents_id, publish_status, kafka_topic, kafka_partition, kafka_offset
-   FROM event_log 
+   SELECT id, cloudevents_id, status, rejection_reason, error_details
+   FROM inbound_event 
    WHERE cloudevents_id = 'evt-xxx' 
    ORDER BY received_at DESC;
    ```
-2. If `publish_status = PENDING` → Kafka connectivity issue, check outbox retry logs
-3. If `publish_status = FAILED` → Check `inbound_event` for rejection details: `SELECT rejection_reason, error_details FROM inbound_event WHERE cloudevents_id = 'evt-xxx';`
-4. Check application logs for Kafka errors:
+2. If `status = REJECTED` and `rejection_reason = KAFKA_PUBLISH_FAILURE` → Kafka connectivity issue
+3. Check application logs for Kafka errors:
    ```bash
    grep "KafkaPublishException\|kafka.*error\|ProducerFencedException" /var/log/cce-collector.log
+   ```
+4. Verify Kafka broker health:
+   ```bash
+   kafka-topics.sh --describe --topic cce.events.inbound --bootstrap-server localhost:9092
    ```
 
 ### High Duplicate Rate
@@ -388,7 +326,7 @@ DELETE FROM inbound_event WHERE received_at < NOW() - INTERVAL '90 days';
 
 ---
 
-## 7. Log Analysis
+## 6. Log Analysis
 
 ### Log Format
 
@@ -439,14 +377,21 @@ The following MDC fields are set per-request for correlation:
 
 ---
 
-## 8. Emergency Procedures
+## 7. Emergency Procedures
 
 ### Kafka Total Outage
 
-1. The service continues accepting events (HTTP 202)
-2. Events are persisted in `event_log` with `publish_status = PENDING`
-3. When Kafka recovers, the outbox scheduler automatically publishes backlog
-4. Monitor backlog: `SELECT COUNT(*) FROM event_log WHERE publish_status = 'PENDING';`
+1. The service returns **HTTP 500** for all incoming events (Kafka publish fails)
+2. Events are persisted in `inbound_event` with `status = 'REJECTED'` and `rejection_reason = 'KAFKA_PUBLISH_FAILURE'`
+3. Source systems (openHIM mediators) will retry based on their own retry policy
+4. When Kafka recovers, new requests will succeed immediately
+5. Previously rejected events can be retried via the rejected event management API:
+   ```bash
+   # List events rejected due to Kafka failure
+   curl "http://localhost:8080/v1/events/rejected?rejectionReason=KAFKA_PUBLISH_FAILURE" | jq .
+   # Retry a specific event
+   curl -X POST "http://localhost:8080/v1/events/rejected/{id}/retry"
+   ```
 
 ### Database Total Outage
 

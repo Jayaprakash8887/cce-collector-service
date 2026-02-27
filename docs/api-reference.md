@@ -238,7 +238,7 @@ Standard Spring Boot Actuator endpoints:
 | `VALIDATION_ERROR` | 400 | CloudEvents envelope validation failed |
 | `FHIR_VALIDATION_ERROR` | 422 | FHIR payload failed structural validation |
 | `DUPLICATE_EVENT` | 200 | Event already received (idempotent) |
-| `KAFKA_PUBLISH_ERROR` | 500 | Failed to publish to Kafka (event persisted, retry pending) |
+| `KAFKA_PUBLISH_ERROR` | 500 | Failed to publish to Kafka — source system should retry |
 | `INTERNAL_ERROR` | 500 | Unexpected server error |
 | `NOT_FOUND` | 404 | Resource not found |
 | `CONSTRAINT_VIOLATION` | 400 | Request body validation error (Bean Validation) |
@@ -247,18 +247,9 @@ Standard Spring Boot Actuator endpoints:
 
 ## 5. CloudEvents Field Name Conventions
 
-The service performs field name translation between the HTTP inbound format and the Kafka outbound format:
+The Collector preserves **CloudEvents spec field names (lowercase)** end-to-end — from HTTP inbound through to the Kafka message. No field name translation is performed.
 
-| Inbound (HTTP, lowercase per spec) | Outbound (Kafka, camelCase) |
-|------------------------------------|----------------------------|
-| `specversion` | `specVersion` |
-| `datacontenttype` | `dataContentType` |
-| `facilityid` | `facilityId` |
-| `correlationid` | `correlationId` |
-| `sourceeventid` | `sourceEventId` |
-| `protocolinstanceid` | `protocolInstanceId` |
-| `protocoldefinitionid` | `protocolDefinitionId` |
-| `actionid` | `actionId` |
+Multi-word field names follow the CloudEvents convention of concatenated lowercase (e.g., `specversion`, `datacontenttype`, `correlationid`).
 
 ---
 
@@ -292,6 +283,5 @@ The service performs field name translation between the HTTP inbound format and 
 |-----------|-------|
 | Max event ID length | 256 characters |
 | Dedup lookback window | 30 days (configurable) |
-| Kafka publish retries | 3 |
-| Outbox retry interval | 30 seconds |
-| Max pending retries per cycle | 100 |
+| Kafka publish retries | 3 (producer-level) |
+| Max payload size | 1 MB |
