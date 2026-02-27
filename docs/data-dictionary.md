@@ -8,7 +8,7 @@ Consolidated reference for all database tables, columns, enums, CloudEvents fiel
 
 ### 1.1 `inbound_event` — Request Audit Log & Rejection Tracking
 
-Every HTTP request is persisted **as-is** before processing. Used for audit trail, primary deduplication, and rejection tracking. Rejected events are recorded directly on this table — a separate dead-letter table is not needed.
+Every HTTP request is persisted **as-is** before processing. Used for audit trail, primary deduplication, and rejection tracking. Rejected events are recorded directly on this table.
 
 **Migration:** `V1__create_inbound_event.sql`
 

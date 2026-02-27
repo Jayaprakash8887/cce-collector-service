@@ -188,7 +188,7 @@ Two tables owned by this service, managed by Flyway:
 inbound_event  1 ──── 0..1  event_log          (inbound_event_id FK)
 ```
 
-> **Note:** Rejected events are tracked directly on `inbound_event` via `status`, `rejection_reason`, `failure_stage`, `error_details`, and `resolved`/`resolved_at` columns. A separate `dead_letter_event` table is not needed.
+> **Note:** Rejected events are tracked directly on `inbound_event` via `status`, `rejection_reason`, `failure_stage`, `error_details`, and `resolved`/`resolved_at` columns. 
 
 ### Deduplication Constraints
 
