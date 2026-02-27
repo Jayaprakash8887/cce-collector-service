@@ -2,7 +2,7 @@
 
 > **Release 1.0.0**
 
-The **Collector Service** is the event ingestion gateway of the Care Coordination Engine (CCE). It receives clinical events from external EHR/RHIE systems, validates and normalizes them into CloudEvents v1.0 envelopes with FHIR R4 payloads, and publishes them to Kafka for downstream processing.
+The **Collector Service** is the event ingestion gateway of the Care Coordination Engine (CCE). It receives clinical events from external EHR/RHIE systems, validates them as CloudEvents v1.0 envelopes with FHIR R4 payloads, and publishes them to Kafka for downstream processing. Event type normalization is the responsibility of the emitter adaptor (openHIM mediator layer).
 
 ## Technology Stack
 

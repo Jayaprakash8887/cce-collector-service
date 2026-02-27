@@ -14,8 +14,11 @@ flowchart TD
     B -->|Yes| D{Duplicate?<br/>source + id in<br/>lookback window}
     D -->|Yes| E[200 OK<br/>status: duplicate]
     D -->|No| F[Persist to<br/>inbound_event<br/>status: RECEIVED]
-    F --> G[Normalize<br/>• event type → org.openphc.cce.*<br/>• generate correlationId<br/>• fill time if absent]
-    G --> H{FHIR Payload<br/>Valid?}
+    F --> G1{Event Type<br/>matches<br/>org.openphc.cce.*?}
+    G1 -->|No| G1a[400 Bad Request]
+    G1a --> G1b[Dead Letter<br/>INVALID_EVENT_TYPE]
+    G1 -->|Yes| G2[Apply Defaults<br/>• generate correlationId if absent<br/>• fill time if absent]
+    G2 --> H{FHIR Payload<br/>Valid?}
     H -->|No| I[422 Unprocessable]
     I --> I1[Update inbound_event<br/>status: REJECTED]
     I1 --> I2[Dead Letter<br/>INVALID_FHIR]
@@ -35,6 +38,8 @@ flowchart TD
     style C1 fill:#d9534f,color:#fff
     style I2 fill:#d9534f,color:#fff
     style N fill:#d9534f,color:#fff
+    style G1a fill:#d9534f,color:#fff
+    style G1b fill:#d9534f,color:#fff
 ```
 
 ---
@@ -48,7 +53,8 @@ sequenceDiagram
     participant Validator as CloudEventValidator
     participant Dedup as DeduplicationService
     participant Repo as InboundEventRepository
-    participant Normalizer as EventNormalizer
+    participant TypeValidator as EventTypeValidator
+    participant Defaults as EventDefaultsEnricher
     participant FHIR as FhirPayloadValidator
     participant EventLog as EventLogRepository
     participant Publisher as EventPublisher
@@ -64,12 +70,12 @@ sequenceDiagram
     Controller->>Repo: save(inboundEvent, status=RECEIVED)
     Repo-->>Controller: inboundEvent
 
-    Controller->>Normalizer: normalizeEventType(type)
-    Normalizer-->>Controller: org.openphc.cce.encounter
-    Controller->>Normalizer: ensureCorrelationId(correlationid)
-    Normalizer-->>Controller: corr-<uuid>
-    Controller->>Normalizer: ensureEventTime(time)
-    Normalizer-->>Controller: OffsetDateTime
+    Controller->>TypeValidator: validateEventType(type)
+    TypeValidator-->>Controller: ✓ matches org.openphc.cce.*
+    Controller->>Defaults: ensureCorrelationId(correlationid)
+    Defaults-->>Controller: corr-<uuid>
+    Controller->>Defaults: ensureEventTime(time)
+    Defaults-->>Controller: OffsetDateTime
 
     Controller->>FHIR: validate(request)
     FHIR-->>Controller: ✓ valid FHIR R4
@@ -99,7 +105,8 @@ sequenceDiagram
     participant Validator as CloudEventValidator
     participant Dedup as DeduplicationService
     participant Repo as InboundEventRepository
-    participant Normalizer as EventNormalizer
+    participant TypeValidator as EventTypeValidator
+    participant Defaults as EventDefaultsEnricher
     participant FHIR as FhirPayloadValidator
     participant DL as DeadLetterService
 
@@ -111,8 +118,10 @@ sequenceDiagram
     Dedup-->>Controller: false
 
     Controller->>Repo: save(inboundEvent, status=RECEIVED)
-    Controller->>Normalizer: normalize fields
-    Normalizer-->>Controller: normalized values
+    Controller->>TypeValidator: validateEventType(type)
+    TypeValidator-->>Controller: ✓ valid type
+    Controller->>Defaults: apply server-side defaults
+    Defaults-->>Controller: enriched values
 
     Controller->>FHIR: validate(request)
     FHIR-->>Controller: ✗ FhirValidationException
@@ -192,7 +201,7 @@ flowchart LR
 
     subgraph CCE["CCE Platform"]
         GW[CCE Gateway<br/>auth + routing]
-        CS[Collector Service<br/>validate → normalize<br/>→ dedup → publish]
+        CS[Collector Service<br/>validate → dedup<br/>→ publish]
         PG[(PostgreSQL<br/>inbound_event<br/>event_log<br/>dead_letter_event)]
         KF[Kafka<br/>cce.events.inbound]
         COMP[Compliance Service]
@@ -268,14 +277,17 @@ erDiagram
 flowchart LR
     subgraph Input["HTTP Request (lowercase)"]
         A1["specversion: '1.0'"]
-        A2["type: 'cce.encounter.created'"]
+        A2["type: 'org.openphc.cce.encounter'"]
         A3["correlationid: null"]
         A4["time: null"]
         A5["facilityid: '0002'"]
     end
 
-    subgraph Normalize["EventNormalizer"]
-        N1["type → org.openphc.cce.encounter"]
+    subgraph Validate["EventTypeValidator"]
+        V1["type matches org.openphc.cce.* ✓"]
+    end
+
+    subgraph Defaults["EventDefaultsEnricher"]
         N2["correlationid → corr-<uuid>"]
         N3["time → server received_at"]
     end
@@ -289,10 +301,11 @@ flowchart LR
     end
 
     A1 --> B1
-    A2 --> N1 --> B2
+    A2 --> V1 --> B2
     A3 --> N2 --> B3
     A4 --> N3 --> B4
     A5 --> B5
 
-    style Normalize fill:#4a90d9,color:#fff
+    style Validate fill:#5cb85c,color:#fff
+    style Defaults fill:#4a90d9,color:#fff
 ```

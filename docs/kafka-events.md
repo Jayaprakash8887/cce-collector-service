@@ -61,7 +61,7 @@ spring:
 
 ## 3. CloudEventMessage Schema
 
-The Kafka message value is a `CloudEventMessage` JSON object. Field names are **camelCase** (translated from CloudEvents lowercase during normalization).
+The Kafka message value is a `CloudEventMessage` JSON object. Field names are **camelCase** (translated from CloudEvents lowercase during field mapping).
 
 ```json
 {
@@ -93,7 +93,7 @@ The Kafka message value is a `CloudEventMessage` JSON object. Field names are **
 |-------|------|----------|-------------|
 | `id` | `String` | Yes | CloudEvents event identifier (from source) |
 | `source` | `String` | Yes | Event source (e.g., `rhie-mediator`, `ebuzima/kigali-south`) |
-| `type` | `String` | Yes | Normalized event type (`org.openphc.cce.<resource>`) |
+| `type` | `String` | Yes | Validated event type (`org.openphc.cce.<resource>`) — emitter adaptor is responsible for normalization |
 | `specVersion` | `String` | Yes | Always `"1.0"` |
 | `subject` | `String` | Yes | Patient UPID — also the Kafka message key |
 | `time` | `ISO-8601 datetime` | Yes | Event time (source-provided or server-generated) |
@@ -120,7 +120,7 @@ HTTP Request → PostgreSQL (event_log, publish_status=PENDING) → Kafka Publis
 
 ### How It Works
 
-1. Normalized event is persisted to `event_log` with `publish_status = 'PENDING'`
+1. Validated event is persisted to `event_log` with `publish_status = 'PENDING'`
 2. `EventPublisher.publish()` sends the message to Kafka
 3. On success: `publish_status` → `PUBLISHED`, Kafka metadata recorded (`kafka_topic`, `kafka_partition`, `kafka_offset`, `published_at`)
 4. On failure: `publish_status` → `FAILED`, dead letter created

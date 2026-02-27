@@ -8,7 +8,7 @@ Consolidated reference for all database tables, columns, enums, CloudEvents fiel
 
 ### 1.1 `inbound_event` — Raw Request Audit Log
 
-Every HTTP request is persisted **as-is** before any normalization or processing. Used for audit trail and primary deduplication.
+Every HTTP request is persisted **as-is** before processing. Used for audit trail and primary deduplication.
 
 **Migration:** `V1__create_inbound_event.sql`
 
@@ -17,7 +17,7 @@ Every HTTP request is persisted **as-is** before any normalization or processing
 | `id` | `UUID` | No | `gen_random_uuid()` | Primary key |
 | `cloudevents_id` | `VARCHAR` | No | — | CloudEvents `id` from the source system |
 | `source` | `VARCHAR` | No | — | CloudEvents `source` (e.g., `rhie-mediator`, `ebuzima/kigali-south`) |
-| `type` | `VARCHAR` | No | — | CloudEvents `type` (raw, before normalization) |
+| `type` | `VARCHAR` | No | — | CloudEvents `type` as received from emitter adaptor |
 | `spec_version` | `VARCHAR` | No | `'1.0'` | CloudEvents spec version |
 | `subject` | `VARCHAR` | Yes | — | Patient UPID (e.g., `260225-0002-5501`) |
 | `event_time` | `TIMESTAMPTZ` | Yes | — | Source-provided event time |
@@ -45,7 +45,7 @@ Every HTTP request is persisted **as-is** before any normalization or processing
 
 ---
 
-### 1.2 `event_log` — Normalized Event Outbox
+### 1.2 `event_log` — Validated Event Outbox
 
 Each row corresponds to exactly one Kafka message on `cce.events.inbound`. This is the outbox table — the authoritative source of truth for published events.
 
@@ -60,7 +60,7 @@ Each row corresponds to exactly one Kafka message on `cce.events.inbound`. This 
 | `source` | `VARCHAR` | No | — | CloudEvents `source` |
 | `source_event_id` | `VARCHAR` | Yes | — | Source system's internal event ID |
 | `subject` | `VARCHAR` | No | — | Patient UPID — also used as Kafka partition key |
-| `type` | `VARCHAR` | No | — | **Normalized** event type (`org.openphc.cce.<resource>`) |
+| `type` | `VARCHAR` | No | — | **Validated** event type — must match `org.openphc.cce.<resource>` (emitter adaptor is responsible for sending the correct format) |
 | `event_time` | `TIMESTAMPTZ` | No | — | Event time (original or server-generated) |
 | `received_at` | `TIMESTAMPTZ` | No | — | Server receipt timestamp (UTC) |
 | `correlation_id` | `VARCHAR` | No | — | Correlation ID (original or generated `corr-<uuid>`) |
@@ -170,6 +170,7 @@ Reason an event was rejected and dead-lettered.
 | Value | Failure Stage | Description |
 |-------|---------------|-------------|
 | `INVALID_ENVELOPE` | `VALIDATION` | Missing or invalid CloudEvents required fields |
+| `INVALID_EVENT_TYPE` | `VALIDATION` | `type` does not match required `org.openphc.cce.<resource>` pattern |
 | `INVALID_FHIR` | `VALIDATION` | FHIR R4 payload failed structural validation |
 | `DUPLICATE` | `PROCESSING` | Duplicate `(id, source)` detected within lookback window |
 | `MISSING_SUBJECT` | `VALIDATION` | `subject` field missing (required by CCE for patient routing) |
@@ -184,7 +185,7 @@ Pipeline stage where the failure occurred (CHECK constraint on `dead_letter_even
 | Value | Description |
 |-------|-------------|
 | `VALIDATION` | CloudEvents envelope or FHIR payload validation |
-| `PROCESSING` | Deduplication, normalization, or persistence |
+| `PROCESSING` | Deduplication or persistence |
 | `KAFKA_PUBLISH` | Kafka producer send failure |
 
 ---
@@ -200,7 +201,7 @@ Inbound requests use **lowercase** field names per the CloudEvents v1.0 specific
 | `specversion` | `string` | Must be `"1.0"` | `"1.0"` |
 | `id` | `string` | Non-empty, max 256 chars | `"evt-eb010001-0001-4000-8000-000000000001"` |
 | `source` | `string` | Non-empty URI or short identifier | `"rhie-mediator"` |
-| `type` | `string` | Non-empty, normalized to `org.openphc.cce.<resource>` | `"cce.encounter.created"` |
+| `type` | `string` | Non-empty, must match `org.openphc.cce.<resource>` (rejected otherwise) | `"org.openphc.cce.encounter"` |
 | `subject` | `string` | Non-empty patient UPID | `"260225-0002-5501"` |
 | `data` | `object` | Valid JSON; if FHIR, must parse via HAPI | `{ "resourceType": "Encounter", ... }` |
 
@@ -232,7 +233,7 @@ Published to `cce.events.inbound` using **camelCase** field names matching the C
 |-------|------|----------|--------|
 | `id` | `String` | No | `event_log.cloudevents_id` |
 | `source` | `String` | No | `event_log.source` |
-| `type` | `String` | No | `event_log.type` (normalized) |
+| `type` | `String` | No | `event_log.type` (validated) |
 | `specVersion` | `String` | No | Always `"1.0"` |
 | `subject` | `String` | No | `event_log.subject` — also the Kafka message key |
 | `time` | `OffsetDateTime` | No | `event_log.event_time` |
@@ -270,17 +271,29 @@ The Collector translates CloudEvents lowercase field names to camelCase for the 
 
 ---
 
-## 6. Event Type Normalization
+## 6. Event Type Validation
 
-The Collector normalizes inbound event types to a standard pattern before publishing to Kafka:
+The Collector **does not normalize** inbound event types — normalization is the responsibility of the emitter adaptor (openHIM mediator layer). Instead, the Collector **strictly validates** that the `type` field matches the required pattern and rejects non-conforming events.
 
-| Inbound Pattern | Normalized Form | Example |
-|-----------------|-----------------|---------|
-| `org.openphc.cce.<resource>` | Pass-through (already normalized) | `org.openphc.cce.encounter` |
-| `cce.<resource>.created` | `org.openphc.cce.<resource>` | `cce.observation.created` → `org.openphc.cce.observation` |
-| `cce.<resource>.updated` | `org.openphc.cce.<resource>` | `cce.encounter.updated` → `org.openphc.cce.encounter` |
-| `cce.<resource>.deleted` | `org.openphc.cce.<resource>` | `cce.medicationrequest.deleted` → `org.openphc.cce.medicationrequest` |
-| Other patterns | Pass-through (no normalization) | `custom.event.type` |
+### Required Format
+
+```
+org.openphc.cce.<resource>
+```
+
+Where `<resource>` is a lowercase FHIR R4 resource type (e.g., `encounter`, `observation`, `medicationrequest`).
+
+### Validation Behaviour
+
+| Inbound `type` Value | Valid? | Action |
+|----------------------|--------|--------|
+| `org.openphc.cce.encounter` | Yes | Accepted — passes through unchanged |
+| `org.openphc.cce.observation` | Yes | Accepted — passes through unchanged |
+| `cce.encounter.created` | **No** | Rejected — `INVALID_EVENT_TYPE`, 400 Bad Request |
+| `cce.observation.updated` | **No** | Rejected — `INVALID_EVENT_TYPE`, 400 Bad Request |
+| `custom.event.type` | **No** | Rejected — `INVALID_EVENT_TYPE`, 400 Bad Request |
+
+> **Emitter adaptors** (openHIM mediators) are responsible for mapping source-system event types to the `org.openphc.cce.<resource>` format before submitting to the Collector.
 
 ---
 

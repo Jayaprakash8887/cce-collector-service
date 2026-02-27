@@ -4,7 +4,7 @@
 
 The Collector Service is the **single point of entry** for all clinical events into the Care Coordination Engine (CCE) platform. No external system publishes directly to Kafka — every event flows through the Collector.
 
-It receives clinical events from external EHR/RHIE systems (via openHIM mediators or direct integrations), validates and normalizes them into CloudEvents v1.0 envelopes with FHIR R4 payloads, and publishes them to Kafka for downstream processing by the Compliance Service.
+It receives clinical events from external EHR/RHIE systems (via openHIM mediators or direct integrations), validates them as CloudEvents v1.0 envelopes with FHIR R4 payloads, and publishes them to Kafka for downstream processing by the Compliance Service. Event type normalization is the responsibility of the emitter adaptor (openHIM mediator layer); the Collector enforces the expected `org.openphc.cce.<resource>` format and rejects non-conforming events.
 
 ## 2. Responsibilities
 
@@ -13,11 +13,12 @@ It receives clinical events from external EHR/RHIE systems (via openHIM mediator
 | 1 | **Receive clinical events** | REST API ingestion from openHIM RHIE mediators, EMR direct push, CHW apps |
 | 2 | **Validate CloudEvents envelope** | Mandatory fields (`specversion`, `id`, `source`, `type`, `subject`), extensions, structure |
 | 3 | **Validate FHIR R4 payloads** | Structural validation of `data` when `datacontenttype` = `application/fhir+json` |
-| 4 | **Normalize event metadata** | Standardize event types, extract patient IDs, generate missing fields |
-| 5 | **Deduplicate inbound events** | Reject/mark duplicates using `(id, source)` compound key via PostgreSQL with configurable lookback window |
-| 6 | **Publish to Kafka** | Topic `cce.events.inbound` with `subject` (patient_id) as partition key |
-| 7 | **Dead-letter invalid events** | Persist rejected events with failure reasons for audit and retry |
-| 8 | **Health/readiness endpoints** | For Kubernetes orchestration |
+| 4 | **Enforce event type contract** | Reject events with `type` not matching `org.openphc.cce.<resource>` pattern — normalization is the emitter adaptor's responsibility |
+| 5 | **Apply server-side defaults** | Generate `correlationid` (UUID with `corr-` prefix) if absent; fill `time` with server `received_at` if absent |
+| 6 | **Deduplicate inbound events** | Reject/mark duplicates using `(id, source)` compound key via PostgreSQL with configurable lookback window |
+| 7 | **Publish to Kafka** | Topic `cce.events.inbound` with `subject` (patient_id) as partition key |
+| 8 | **Dead-letter invalid events** | Persist rejected events with failure reasons for audit and retry |
+| 9 | **Health/readiness endpoints** | For Kubernetes orchestration |
 
 ### Explicit Exclusions
 
@@ -25,8 +26,9 @@ It receives clinical events from external EHR/RHIE systems (via openHIM mediator
 - Time-based state transitions → **Scheduler Service**
 - OAuth token management, routing, rate limiting → **Gateway Service**
 - Analytics or reporting → **Analytics Service**
+- Event type normalization (emitter adaptor responsibility — Collector only validates the format)
 - FHIR profile conformance validation (structural parse only)
-- Event transformation or enrichment beyond normalization
+- Event transformation or enrichment beyond server-side defaults (`correlationid`, `time`)
 - Event routing to multiple topics
 
 ## 3. System Context
@@ -46,7 +48,7 @@ It receives clinical events from external EHR/RHIE systems (via openHIM mediator
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │              ★ CCE Collector Service ★                        │
-│    Validate → Normalize → Deduplicate → Publish to Kafka     │
+│    Validate → Deduplicate → Publish to Kafka                 │
 └──────────────────────────┬──────────────────────────────────┘
                            │  Kafka: cce.events.inbound
                            ▼
@@ -86,7 +88,7 @@ org.openphc.cce.collector/
 ├── domain/
 │   ├── model/                             # JPA entities
 │   │   ├── InboundEvent.java              #   Raw inbound request record (audit/dedup)
-│   │   ├── EventLog.java                  #   Normalized event outbox (Kafka publish source)
+│   │   ├── EventLog.java                  #   Validated event outbox (Kafka publish source)
 │   │   ├── DeadLetterEvent.java           #   Rejected/failed event record
 │   │   └── enums/
 │   │       ├── InboundStatus.java         #   RECEIVED, ACCEPTED, REJECTED, DUPLICATE
@@ -98,10 +100,11 @@ org.openphc.cce.collector/
 │       ├── EventLogRepository.java
 │       └── DeadLetterEventRepository.java
 ├── service/                               # Core business logic
-│   ├── EventIngestionService.java         #   Main orchestrator: validate → normalize → persist → publish
+│   ├── EventIngestionService.java         #   Main orchestrator: validate → persist → publish
 │   ├── CloudEventValidator.java           #   CloudEvents v1.0 envelope validation
 │   ├── FhirPayloadValidator.java          #   FHIR R4 structural validation via HAPI
-│   ├── EventNormalizer.java               #   Type normalization, correlation ID, time fill
+│   ├── EventTypeValidator.java             #   Validates type matches org.openphc.cce.<resource> pattern
+│   ├── EventDefaultsEnricher.java         #   Generates correlationId if absent, fills time if absent
 │   ├── DeduplicationService.java          #   DB dedup with configurable lookback window
 │   ├── EventPublisher.java                #   Outbox publisher + scheduled retry
 │   └── DeadLetterService.java             #   Dead-letter persistence and query
@@ -145,22 +148,25 @@ org.openphc.cce.collector/
        - If exists → update status = 'DUPLICATE', return 200 (idempotent)
     b. If not found → proceed (DB unique constraint is authoritative)
  4. Persist to inbound_event (status = 'RECEIVED', raw_payload = original body)
- 5. Normalization
-    a. Normalize event type to org.openphc.cce.* pattern
-    b. Generate correlationid if absent (UUID with "corr-" prefix)
-    c. Fill time with server received_at if absent
- 6. FHIR Payload Validation (if datacontenttype = application/fhir+json)
+ 5. Event Type Validation
+    a. Validate type matches org.openphc.cce.<resource> pattern
+    b. If invalid → status = 'REJECTED', dead-letter (INVALID_EVENT_TYPE), return 400
+    (Event type normalization is the emitter adaptor's responsibility)
+ 6. Apply Server-Side Defaults
+    a. Generate correlationid if absent (UUID with "corr-" prefix)
+    b. Fill time with server received_at if absent
+ 7. FHIR Payload Validation (if datacontenttype = application/fhir+json)
     a. Parse data via HAPI FHIR
     b. Validate resourceType is present and parseable
     c. Cross-check subject reference (warning only)
     d. If invalid → status = 'REJECTED', dead-letter, return 422
- 7. Update inbound_event.status = 'ACCEPTED'
- 8. Persist normalized event to event_log (publish_status = 'PENDING')
- 9. Publish event_log record to Kafka
+ 8. Update inbound_event.status = 'ACCEPTED'
+ 9. Persist validated event to event_log (publish_status = 'PENDING')
+10. Publish event_log record to Kafka
     a. Key = subject (patient_id) — per-patient ordering
     b. On success: update publish_status = 'PUBLISHED', record Kafka metadata
     c. On failure: stays 'PENDING'/'FAILED', dead-letter created
-10. Return HTTP 202 Accepted with ingestion receipt
+11. Return HTTP 202 Accepted with ingestion receipt
 ```
 
 ## 7. Database Schema
@@ -170,7 +176,7 @@ Three tables owned by this service, managed by Flyway:
 | Table | Purpose | Partitioned |
 |-------|---------|-------------|
 | `inbound_event` | Raw request audit log; primary dedup via `UNIQUE(cloudevents_id, source)` | No |
-| `event_log` | Normalized event outbox for Kafka; monthly-partitioned by `received_at` | Yes (RANGE) |
+| `event_log` | Validated event outbox for Kafka; monthly-partitioned by `received_at` | Yes (RANGE) |
 | `dead_letter_event` | Rejected/failed events with retry support | No |
 
 ### Entity Relationship
@@ -279,7 +285,7 @@ The Collector does not restrict resource types — any valid FHIR R4 resource is
 The Compliance Service consumes `CloudEventMessage` objects from `cce.events.inbound` with these guarantees from the Collector:
 
 1. **`subject` is always present** — used for patient protocol instance lookup
-2. **`type` follows `org.openphc.cce.<resource>`** — used for Tier 1 structural matching
+2. **`type` follows `org.openphc.cce.<resource>`** — strictly validated (not normalized by the Collector; emitter adaptors must send the correct format)
 3. **`data` contains a valid FHIR R4 resource** — parseable via HAPI FHIR
 4. **Field names are camelCase** — matching the `CloudEventMessage` Java class
 5. **Kafka key is `subject`** — per-patient ordering
