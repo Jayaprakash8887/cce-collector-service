@@ -4,7 +4,7 @@
 
 The Collector Service is the **single point of entry** for all clinical events into the Care Coordination Engine (CCE) platform. No external system publishes directly to Kafka — every event flows through the Collector.
 
-It receives clinical events from external EHR/RHIE systems (via openHIM mediators or direct integrations), validates them as CloudEvents v1.0 envelopes with FHIR R4 payloads, and publishes them to Kafka for downstream processing by the Compliance Service. Event type normalization is the responsibility of the emitter adaptor (openHIM mediator layer); the Collector enforces the expected `org.openphc.cce.<resource>` format and rejects non-conforming events.
+It receives clinical events from external EHR/RHIE systems (via openHIM mediators or direct integrations), validates them as CloudEvents v1.0 envelopes with FHIR R4 or plain JSON payloads, and publishes them to Kafka for downstream processing by the Compliance Service. Event type normalization is the responsibility of the emitter adaptor (openHIM mediator layer); the Collector enforces the expected `org.openphc.cce.<resource>` format and rejects non-conforming events.
 
 ## 2. Responsibilities
 
@@ -64,7 +64,7 @@ It receives clinical events from external EHR/RHIE systems (via openHIM mediator
 |---------|------------|---------|
 | Language | Java | 21 (LTS) |
 | Framework | Spring Boot | 3.4.x |
-| Build tool | Maven | 3.9+ |
+| Build tool | Gradle | 8.x |
 | Database | PostgreSQL | 16+ |
 | Message broker | Apache Kafka | 3.7+ (KRaft mode) |
 | FHIR library | HAPI FHIR | 7.4.0 |

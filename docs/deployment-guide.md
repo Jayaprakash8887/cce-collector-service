@@ -5,7 +5,7 @@
 | Dependency | Minimum Version | Notes |
 |-----------|----------------|-------|
 | Java | 21 (LTS) | Eclipse Temurin recommended |
-| Maven | 3.9+ | Only for building from source |
+| Gradle | 8.x | Only for building from source (wrapper included) |
 | PostgreSQL | 16+ | Primary datastore |
 | Apache Kafka | 3.7+ | KRaft mode (no ZooKeeper) |
 | Docker | 24+ | For containerized deployment |
@@ -29,20 +29,20 @@ This starts:
 ### 2.2 Build the Application
 
 ```bash
-mvn clean package -DskipTests
+./gradlew build -x test
 ```
 
 ### 2.3 Run with Local Profile
 
 ```bash
-java -jar target/cce-collector-service-1.0.0-SNAPSHOT.jar \
+java -jar build/libs/cce-collector-service-1.0.0-SNAPSHOT.jar \
   --spring.profiles.active=local
 ```
 
-Or using Maven:
+Or using Gradle:
 
 ```bash
-mvn spring-boot:run -Dspring-boot.run.profiles=local
+./gradlew bootRun --args='--spring.profiles.active=local'
 ```
 
 The application will start on port **8080**.
@@ -79,7 +79,7 @@ curl -X POST http://localhost:8080/v1/events \
 
 Activate a profile:
 ```bash
-java -jar target/cce-collector-service-1.0.0-SNAPSHOT.jar \
+java -jar build/libs/cce-collector-service-1.0.0-SNAPSHOT.jar \
   --spring.profiles.active=production
 ```
 
@@ -127,7 +127,7 @@ docker build -t cce-collector-service:latest .
 ```
 
 The Dockerfile uses a **multi-stage build**:
-1. Stage 1 (`builder`): `eclipse-temurin:21-jdk-alpine` — compiles `mvn package`
+1. Stage 1 (`builder`): `eclipse-temurin:21-jdk-alpine` — compiles `./gradlew build`
 2. Stage 2 (`runtime`): `eclipse-temurin:21-jre-alpine` — minimal runtime image
 
 ### Run Container
@@ -157,10 +157,10 @@ Flyway runs automatically on startup. Migrations are located in `src/main/resour
 ### Manual Migration Execution
 
 ```bash
-mvn flyway:migrate \
-  -Dflyway.url=jdbc:postgresql://localhost:5433/cce_collector \
-  -Dflyway.user=cce_user \
-  -Dflyway.password=cce_pass
+./gradlew flywayMigrate \
+  -Pflyway.url=jdbc:postgresql://localhost:5432/cce_collector \
+  -Pflyway.user=cce_user \
+  -Pflyway.password=cce_pass
 ```
 
 ---

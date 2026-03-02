@@ -2,7 +2,7 @@
 
 > **Release 1.0.0**
 
-The **Collector Service** is the event ingestion gateway of the Care Coordination Engine (CCE). It receives clinical events from external EHR/RHIE systems, validates them as CloudEvents v1.0 envelopes with FHIR R4 payloads, and publishes them to Kafka for downstream processing. Event type normalization is the responsibility of the emitter adaptor (openHIM mediator layer).
+The **Collector Service** is the event ingestion gateway of the Care Coordination Engine (CCE). It receives clinical events from external EHR/RHIE systems, validates them as CloudEvents v1.0 envelopes with FHIR R4 or plain JSON payloads, and publishes them to Kafka for downstream processing. Event type normalization is the responsibility of the emitter adaptor (openHIM mediator layer).
 
 ## Technology Stack
 
@@ -10,7 +10,7 @@ The **Collector Service** is the event ingestion gateway of the Care Coordinatio
 |---------|------------|---------|
 | Language | Java | 21 (LTS) |
 | Framework | Spring Boot | 3.4.x |
-| Build tool | Maven | 3.9+ |
+| Build tool | Gradle | 8.x |
 | Database | PostgreSQL | 16+ |
 | Message broker | Apache Kafka | 3.7+ (KRaft mode) |
 | FHIR library | HAPI FHIR | 7.4.0 |
@@ -36,10 +36,10 @@ Detailed documentation is available in the [`docs/`](docs/) directory:
 docker compose up -d
 
 # Build
-./mvnw clean package
+./gradlew build
 
 # Run
-java -jar target/cce-collector-service-*.jar
+java -jar build/libs/cce-collector-service-*.jar
 ```
 
 See the [Deployment Guide](docs/deployment-guide.md) for full setup instructions.
