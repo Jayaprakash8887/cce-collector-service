@@ -1,0 +1,30 @@
+# ============================================================
+# CCE Collector Service — Production Profile
+# ============================================================
+
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 10
+      idle-timeout: 180000
+      max-lifetime: 300000
+      connection-timeout: 10000
+
+  kafka:
+    producer:
+      retries: 5
+      properties:
+        linger.ms: 10
+        batch.size: 32768
+
+management:
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    root: WARN
+    org.openphc.cce.collector: INFO
+    org.springframework.kafka: WARN
