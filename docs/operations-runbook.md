@@ -138,7 +138,7 @@ Recommended panels for a Collector Service dashboard:
 
 ### Overview
 
-Rejected events are events that failed validation or processing. They are tracked in the `inbound_event` table with `status = 'REJECTED'`, along with `rejection_reason`, `failure_stage`, `error_details`, and `resolved` columns. Optionally, a summary is also published to the `cce.deadletter` Kafka topic for external monitoring.
+Rejected events are events that failed validation or processing. They are tracked in the `inbound_event` table with `status = 'REJECTED'`, along with `rejection_reason`, `error_details`, and `resolved` columns. Optionally, a summary is also published to the `cce.deadletter` Kafka topic for external monitoring.
 
 ### Querying Rejected Events
 
@@ -161,7 +161,7 @@ GROUP BY rejection_reason
 ORDER BY count DESC;
 
 -- Recent failures
-SELECT id, cloudevents_id, source, rejection_reason, failure_stage, error_details, received_at
+SELECT id, cloudevents_id, source, rejection_reason, error_details, received_at
 FROM inbound_event 
 WHERE status = 'REJECTED' AND resolved = false 
 ORDER BY received_at DESC 

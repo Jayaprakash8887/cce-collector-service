@@ -151,7 +151,6 @@ List rejected events with pagination. Queries `inbound_event` where `status = 'R
         "source": "ebuzima/kigali-south",
         "eventType": "cce.encounter.created",
         "rejectionReason": "INVALID_FHIR",
-        "failureStage": "VALIDATION",
         "errorDetails": "Unable to parse FHIR resource",
         "resolved": false,
         "receivedAt": "2025-01-15T09:30:05Z"

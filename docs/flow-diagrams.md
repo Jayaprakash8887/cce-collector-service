@@ -14,10 +14,7 @@ flowchart TD
     B -->|Yes| D{Duplicate?<br/>source + id in<br/>lookback window}
     D -->|Yes| E[200 OK<br/>status: duplicate]
     D -->|No| F[Persist to<br/>inbound_event<br/>status: RECEIVED]
-    F --> G1{Event Type<br/>matches<br/>org.openphc.cce.*?}
-    G1 -->|No| G1a[400 Bad Request]
-    G1a --> G1b[Update inbound_event<br/>status: REJECTED<br/>reason: INVALID_EVENT_TYPE]
-    G1 -->|Yes| G2[Apply Defaults<br/>• generate correlationId if absent<br/>• fill time if absent]
+    F --> G2[Apply Defaults<br/>• generate correlationId if absent<br/>• fill time if absent]
     G2 --> H0{datacontenttype?}
     H0 -->|application/fhir+json<br/>or absent| H{FHIR Payload<br/>Valid?}
     H0 -->|application/json| H3{Valid JSON<br/>Object?}
@@ -44,8 +41,6 @@ flowchart TD
     style C1 fill:#d9534f,color:#fff
     style I2 fill:#d9534f,color:#fff
     style N fill:#d9534f,color:#fff
-    style G1a fill:#d9534f,color:#fff
-    style G1b fill:#d9534f,color:#fff
     style H4 fill:#d9534f,color:#fff
     style H4a fill:#d9534f,color:#fff
     style H3a fill:#d9534f,color:#fff
@@ -63,7 +58,6 @@ sequenceDiagram
     participant Validator as CloudEventValidator
     participant Dedup as DeduplicationService
     participant Repo as InboundEventRepository
-    participant TypeValidator as EventTypeValidator
     participant Defaults as EventDefaultsEnricher
     participant FHIR as FhirPayloadValidator
     participant Kafka as Kafka Broker
@@ -78,8 +72,6 @@ sequenceDiagram
     Controller->>Repo: save(inboundEvent, status=RECEIVED)
     Repo-->>Controller: inboundEvent
 
-    Controller->>TypeValidator: validateEventType(type)
-    TypeValidator-->>Controller: ✓ matches org.openphc.cce.*
     Controller->>Defaults: ensureCorrelationId(correlationid)
     Defaults-->>Controller: corr-<uuid>
     Controller->>Defaults: ensureEventTime(time)
@@ -107,7 +99,6 @@ sequenceDiagram
     participant Validator as CloudEventValidator
     participant Dedup as DeduplicationService
     participant Repo as InboundEventRepository
-    participant TypeValidator as EventTypeValidator
     participant Defaults as EventDefaultsEnricher
     participant FHIR as FhirPayloadValidator
     participant RS as RejectionService
@@ -120,8 +111,6 @@ sequenceDiagram
     Dedup-->>Controller: false
 
     Controller->>Repo: save(inboundEvent, status=RECEIVED)
-    Controller->>TypeValidator: validateEventType(type)
-    TypeValidator-->>Controller: ✓ valid type
     Controller->>Defaults: apply server-side defaults
     Defaults-->>Controller: enriched values
 
@@ -212,7 +201,6 @@ erDiagram
         JSONB raw_payload
         VARCHAR status
         VARCHAR rejection_reason
-        VARCHAR failure_stage
         TEXT error_details
         BOOLEAN resolved
         TIMESTAMPTZ received_at
@@ -231,10 +219,6 @@ flowchart LR
         A3["correlationid: null"]
         A4["time: null"]
         A5["facilityid: '0002'"]
-    end
-
-    subgraph Validate["EventTypeValidator"]
-        V1["type matches org.openphc.cce.* ✓"]
     end
 
     subgraph Defaults["EventDefaultsEnricher"]

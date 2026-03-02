@@ -28,7 +28,7 @@ Detailed reference for all Kafka topics, message schemas, publishing contracts, 
 | **Message Value** | Rejected event summary JSON |
 | **Purpose** | Downstream alerting/monitoring of rejected events |
 
-> **Note:** The primary rejection record is stored in `inbound_event` (with `status = REJECTED`, `rejection_reason`, `failure_stage`, and `error_details`). Publishing to `cce.deadletter` is optional and intended for external monitoring systems that consume Kafka rather than query the database.
+> **Note:** The primary rejection record is stored in `inbound_event` (with `status = REJECTED`, `rejection_reason`, and `error_details`). Publishing to `cce.deadletter` is optional and intended for external monitoring systems that consume Kafka rather than query the database.
 
 ---
 
@@ -95,7 +95,7 @@ The Kafka message value is a CloudEvents JSON object. Field names use **lowercas
 |-------|------|----------|-------------|
 | `id` | `String` | Yes | CloudEvents event identifier (from source) |
 | `source` | `String` | Yes | Event source (e.g., `rhie-mediator`, `ebuzima/kigali-south`) |
-| `type` | `String` | Yes | Validated event type (`org.openphc.cce.<resource>`) — emitter adaptor is responsible for normalization |
+| `type` | `String` | Yes | Event type (mandatory CloudEvents attribute, passed through from emitter) |
 | `specversion` | `String` | Yes | Always `"1.0"` |
 | `subject` | `String` | Yes | Patient UPID — also the Kafka message key |
 | `time` | `ISO-8601 datetime` | Yes | Event time (source-provided or server-generated) |
@@ -161,7 +161,7 @@ The Compliance Service consumes from `cce.events.inbound` with these guarantees 
 | # | Guarantee | Description |
 |---|-----------|-------------|
 | 1 | `subject` always present | Used for patient protocol instance lookup |
-| 2 | `type` follows `org.openphc.cce.<resource>` | Used for Tier 1 structural matching in `trigger_index` |
+| 2 | `type` is always present and non-empty | Passed through from emitter; Compliance Service uses `data.resourceType` for Tier 1 structural matching |
 | 3 | `data` contains valid payload | FHIR R4 resource or valid JSON object depending on `datacontenttype` |
 | 4 | Field names use CloudEvents lowercase convention | e.g., `specversion`, `datacontenttype`, `correlationid` |
 | 5 | Kafka key = `subject` | Per-patient ordering |

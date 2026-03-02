@@ -28,7 +28,6 @@ Every HTTP request is persisted **as-is** before processing. Used for audit trai
 | `raw_payload` | `JSONB` | No | — | Full original request body (immutable) |
 | `status` | `VARCHAR` | No | `'RECEIVED'` | Processing status (see `InboundStatus` enum) |
 | `rejection_reason` | `VARCHAR` | Yes | — | Rejection reason code (if status = `REJECTED`; see `RejectionReason` enum) |
-| `failure_stage` | `VARCHAR` | Yes | — | Pipeline stage where failure occurred (see `FailureStage` enum) |
 | `error_details` | `TEXT` | Yes | — | Stack trace or validation error messages |
 | `resolved` | `BOOLEAN` | No | `false` | Whether a rejected event has been resolved/acknowledged |
 | `resolved_at` | `TIMESTAMPTZ` | Yes | — | Resolution timestamp |
@@ -68,28 +67,17 @@ Status of an `inbound_event` record as it moves through the pipeline.
 
 Reason an event was rejected (stored on `inbound_event.rejection_reason`).
 
-| Value | Failure Stage | Description |
-|-------|---------------|-------------|
-| `INVALID_ENVELOPE` | `VALIDATION` | Missing or invalid CloudEvents required fields |
-| `INVALID_EVENT_TYPE` | `VALIDATION` | `type` does not match required `org.openphc.cce.<resource>` pattern |
-| `INVALID_FHIR` | `VALIDATION` | FHIR R4 payload failed structural validation (only when `datacontenttype` = `application/fhir+json`) |
-| `INVALID_JSON` | `VALIDATION` | Non-FHIR JSON payload is not valid JSON or is empty (when `datacontenttype` = `application/json`) |
-| `UNSUPPORTED_CONTENT_TYPE` | `VALIDATION` | `datacontenttype` is not `application/fhir+json` or `application/json` |
-| `DUPLICATE` | `PROCESSING` | Duplicate `(id, source)` detected within lookback window |
-| `MISSING_SUBJECT` | `VALIDATION` | `subject` field missing (required by CCE for patient routing) |
-| `PAYLOAD_TOO_LARGE` | `VALIDATION` | Request body exceeds `max-payload-size` (default 1 MB) |
-| `DESERIALIZATION_ERROR` | `VALIDATION` | Request body could not be parsed as JSON |
-| `KAFKA_PUBLISH_FAILURE` | `KAFKA_PUBLISH` | Kafka broker unavailable or publish timed out — HTTP 500 returned to caller |
-
-### 2.3 `FailureStage`
-
-Pipeline stage where the failure occurred (stored on `inbound_event.failure_stage`).
-
 | Value | Description |
 |-------|-------------|
-| `VALIDATION` | CloudEvents envelope, event type, or payload validation |
-| `PROCESSING` | Deduplication or persistence |
-| `KAFKA_PUBLISH` | Kafka producer send failure |
+| `INVALID_ENVELOPE` | Missing or invalid CloudEvents required fields (including missing `type`) |
+| `INVALID_FHIR` | FHIR R4 payload failed structural validation (only when `datacontenttype` = `application/fhir+json`) |
+| `INVALID_JSON` | Non-FHIR JSON payload is not valid JSON or is empty (when `datacontenttype` = `application/json`) |
+| `UNSUPPORTED_CONTENT_TYPE` | `datacontenttype` is not `application/fhir+json` or `application/json` |
+| `DUPLICATE` | Duplicate `(id, source)` detected within lookback window |
+| `MISSING_SUBJECT` | `subject` field missing (required by CCE for patient routing) |
+| `PAYLOAD_TOO_LARGE` | Request body exceeds `max-payload-size` (default 1 MB) |
+| `DESERIALIZATION_ERROR` | Request body could not be parsed as JSON |
+| `KAFKA_PUBLISH_FAILURE` | Kafka broker unavailable or publish timed out — HTTP 500 returned to caller |
 
 ---
 
@@ -104,7 +92,7 @@ Inbound requests use **lowercase** field names per the CloudEvents v1.0 specific
 | `specversion` | `string` | Must be `"1.0"` | `"1.0"` |
 | `id` | `string` | Non-empty, max 256 chars | `"evt-eb010001-0001-4000-8000-000000000001"` |
 | `source` | `string` | Non-empty URI or short identifier | `"rhie-mediator"` |
-| `type` | `string` | Non-empty, must match `org.openphc.cce.<resource>` (rejected otherwise) | `"org.openphc.cce.encounter"` |
+| `type` | `string` | Non-empty (mandatory CloudEvents attribute, no format restriction) | `"org.openphc.cce.encounter"` |
 | `subject` | `string` | Non-empty patient UPID | `"260225-0002-5501"` |
 | `data` | `object` | Valid JSON; FHIR validation applied only when `datacontenttype` = `application/fhir+json` | `{ "resourceType": "Encounter", ... }` |
 
@@ -174,51 +162,36 @@ The Collector preserves CloudEvents lowercase field names end-to-end (HTTP → K
 
 ---
 
-## 6. Event Type Validation
+## 6. `type` Field
 
-The Collector **does not normalize** inbound event types — normalization is the responsibility of the emitter adaptor (openHIM mediator layer). Instead, the Collector **strictly validates** that the `type` field matches the required pattern and rejects non-conforming events.
+The `type` field is a mandatory CloudEvents v1.0 attribute. The Collector validates only that it is **present and non-empty** — it does not enforce any specific format, pattern, or whitelist. The emitter adaptor (openHIM mediator) sets the value; the Collector passes it through to Kafka unchanged.
 
-### Required Format
-
-```
-org.openphc.cce.<resource>
-```
-
-Where `<resource>` is a lowercase FHIR R4 resource type (e.g., `encounter`, `observation`, `medicationrequest`).
-
-### Validation Behaviour
-
-| Inbound `type` Value | Valid? | Action |
-|----------------------|--------|--------|
-| `org.openphc.cce.encounter` | Yes | Accepted — passes through unchanged |
-| `org.openphc.cce.observation` | Yes | Accepted — passes through unchanged |
-| `cce.encounter.created` | **No** | Rejected — `INVALID_EVENT_TYPE`, 400 Bad Request |
-| `cce.observation.updated` | **No** | Rejected — `INVALID_EVENT_TYPE`, 400 Bad Request |
-| `custom.event.type` | **No** | Rejected — `INVALID_EVENT_TYPE`, 400 Bad Request |
-
-> **Emitter adaptors** (openHIM mediators) are responsible for mapping source-system event types to the `org.openphc.cce.<resource>` format before submitting to the Collector.
+> **Tier 1 structural matching** in the Compliance Service uses `data.resourceType` (payload), not the envelope `type`.
 
 ---
 
 ## 7. FHIR Resource Types
 
-The Collector accepts any valid FHIR R4 resource. These are the resource types commonly used in the CCE clinical workflow:
+The Collector accepts any valid FHIR R4 resource when `datacontenttype` is `application/fhir+json`. These are the resource types commonly used in the RHIE clinical workflow:
 
-| Resource Type | Event Type | Clinical Context |
-|---------------|------------|------------------|
-| `Encounter` | `org.openphc.cce.encounter` | Visit registration, consultations |
-| `Observation` | `org.openphc.cce.observation` | Vital signs, lab results |
-| `Condition` | `org.openphc.cce.condition` | Diagnoses, chief complaints |
-| `MedicationRequest` | `org.openphc.cce.medicationrequest` | Prescriptions |
-| `MedicationDispense` | `org.openphc.cce.medicationdispense` | Pharmacy dispensing |
-| `ServiceRequest` | `org.openphc.cce.servicerequest` | Lab orders, referrals |
-| `Procedure` | `org.openphc.cce.procedure` | Clinical procedures |
-| `EpisodeOfCare` | `org.openphc.cce.episodeofcare` | Care episodes |
-| `DiagnosticReport` | `org.openphc.cce.diagnosticreport` | Lab and imaging reports |
-| `Immunization` | `org.openphc.cce.immunization` | Vaccinations |
-| `AllergyIntolerance` | `org.openphc.cce.allergyintolerance` | Allergy records |
-| `CarePlan` | `org.openphc.cce.careplan` | Treatment plans |
-| `Patient` | `org.openphc.cce.patient` | Patient demographics |
+| Resource Type | Clinical Context |
+|---------------|------------------|
+| `Encounter` | Visit registration, consultations, transfers |
+| `Observation` | Vital signs, lab results, chief complaints |
+| `Condition` | Diagnoses |
+| `MedicationRequest` | Prescriptions (e-Prescription) |
+| `MedicationDispense` | Pharmacy dispensing |
+| `MedicationAdministration` | Medication given to patient |
+| `ServiceRequest` | Lab orders, imaging orders, referrals |
+| `Procedure` | Clinical procedures |
+| `Immunization` | Vaccinations |
+| `AllergyIntolerance` | Allergy records |
+| `ImagingStudy` | Imaging results (DICOM) |
+| `DiagnosticReport` | Lab and imaging reports |
+| `Consent` | Patient consent records |
+| `EpisodeOfCare` | Care episodes |
+| `CarePlan` | Treatment plans |
+| `Patient` | Patient demographics |
 
 ---
 
