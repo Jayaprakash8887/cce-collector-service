@@ -178,11 +178,12 @@ inbound_event  (single table — audit, dedup, rejection tracking)
 
 > **Note:** Rejected events are tracked directly on `inbound_event` via `status`, `rejection_reason`, and `error_details` columns. 
 
-### Deduplication Constraints
+### Deduplication Constraints & Indexes
 
-| Constraint | Table | Purpose |
-|-----------|-------|---------|
-| `UNIQUE(cloudevents_id, source)` | `inbound_event` | Primary dedup |
+| Constraint / Index | Table | Columns | Purpose |
+|-----------|-------|---------|--------|
+| `UNIQUE(cloudevents_id, source)` | `inbound_event` | `(cloudevents_id, source)` | Authoritative dedup (unique constraint) |
+| `idx_inbound_event_dedup` | `inbound_event` | `(cloudevents_id, source, received_at)` | Lookback dedup query — covers `WHERE cloudevents_id = ? AND source = ? AND received_at > ?` (index-only scan) |
 
 
 ## 8. Deduplication Strategy
