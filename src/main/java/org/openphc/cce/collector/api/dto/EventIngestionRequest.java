@@ -35,6 +35,7 @@ public class EventIngestionRequest {
 
     // ─── CloudEvents required attributes ───────────────────────────
 
+    @NotBlank(message = "specversion is required")
     private String specversion;
 
     @NotBlank(message = "id is required")
