@@ -39,10 +39,11 @@ Every HTTP request is persisted **as-is** before processing. Used for audit trai
 | Index | Columns | Purpose |
 |-------|---------|---------|
 | `uq_inbound_event_id_source` | `(cloudevents_id, source)` | Deduplication (unique constraint) |
+| `idx_inbound_event_dedup` | `(cloudevents_id, source, received_at)` | Dedup lookback query — covers `existsBy...ReceivedAtAfter` (index-only scan) |
 | `idx_inbound_event_subject` | `subject` | Patient-scoped queries |
 | `idx_inbound_event_source` | `source` | Source-filtered queries |
 | `idx_inbound_event_status` | `status` | Status-based filtering |
-| `idx_inbound_event_received` | `received_at` | Time-range queries, lookback dedup |
+| `idx_inbound_event_received` | `received_at` | Time-range queries |
 | `idx_inbound_event_rejection` | `rejection_reason` | Rejection reason queries (WHERE status = 'REJECTED') |
 
 
