@@ -202,7 +202,6 @@ erDiagram
         VARCHAR status
         VARCHAR rejection_reason
         TEXT error_details
-        BOOLEAN resolved
         TIMESTAMPTZ received_at
     }
 ```

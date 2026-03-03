@@ -104,12 +104,12 @@ groups:
           description: "Events failing to publish to Kafka. Check broker connectivity."
 
       - alert: RejectedEventBacklog
-        expr: cce_rejected_events_unresolved_total > 100
+        expr: cce_rejected_events_total > 100
         for: 10m
         labels:
           severity: warning
         annotations:
-          summary: "Unresolved rejected event backlog growing"
+          summary: "Rejected event backlog growing"
 
       - alert: DBConnectionPoolExhausted
         expr: hikaricp_connections_pending > 0
@@ -129,7 +129,7 @@ Recommended panels for a Collector Service dashboard:
 3. **Duplicate rate** — `rate(cce_events_duplicated_total[1m]) / rate(cce_events_received_total[1m])`
 4. **P95 ingestion latency** — `histogram_quantile(0.95, rate(http_server_requests_seconds_bucket{uri="/v1/events"}[5m]))`
 5. **Kafka publish latency** — `histogram_quantile(0.95, rate(cce_kafka_publish_seconds_bucket[5m]))`
-6. **Rejected event backlog** — `cce_rejected_events_unresolved_total`
+6. **Rejected event backlog** — `cce_rejected_events_total`
 7. **DB connection pool** — `hikaricp_connections_active` vs `hikaricp_connections_idle`
 
 ---
@@ -138,7 +138,7 @@ Recommended panels for a Collector Service dashboard:
 
 ### Overview
 
-Rejected events are events that failed validation or processing. They are tracked in the `inbound_event` table with `status = 'REJECTED'`, along with `rejection_reason`, `error_details`, and `resolved` columns. Optionally, a summary is also published to the `cce.deadletter` Kafka topic for external monitoring.
+Rejected events are events that failed validation or processing. They are tracked in the `inbound_event` table with `status = 'REJECTED'`, along with `rejection_reason` and `error_details` columns. Optionally, a summary is also published to the `cce.deadletter` Kafka topic for external monitoring.
 
 ### Querying Rejected Events
 
@@ -156,21 +156,21 @@ curl "http://localhost:8080/v1/events/rejected/{id}" | jq .
 -- Count by rejection reason
 SELECT rejection_reason, COUNT(*) 
 FROM inbound_event 
-WHERE status = 'REJECTED' AND resolved = false 
+WHERE status = 'REJECTED' 
 GROUP BY rejection_reason 
 ORDER BY count DESC;
 
 -- Recent failures
 SELECT id, cloudevents_id, source, rejection_reason, error_details, received_at
 FROM inbound_event 
-WHERE status = 'REJECTED' AND resolved = false 
+WHERE status = 'REJECTED' 
 ORDER BY received_at DESC 
 LIMIT 20;
 
 -- Failures by source
 SELECT source, COUNT(*) 
 FROM inbound_event 
-WHERE status = 'REJECTED' AND resolved = false
+WHERE status = 'REJECTED'
   AND received_at > NOW() - INTERVAL '24 hours'
 GROUP BY source 
 ORDER BY count DESC;
@@ -183,15 +183,13 @@ ORDER BY count DESC;
 curl -X POST "http://localhost:8080/v1/events/rejected/{id}/retry"
 ```
 
-### Batch Resolution (SQL)
+### Batch Cleanup (SQL)
 
 ```sql
--- Mark old rejected events as resolved (e.g., after source system is fixed)
-UPDATE inbound_event 
-SET resolved = true, resolved_at = NOW()
+-- Clean old rejected events (e.g., after source system is fixed)
+DELETE FROM inbound_event 
 WHERE source = 'ebuzima/broken-facility' 
   AND status = 'REJECTED'
-  AND resolved = false 
   AND received_at < NOW() - INTERVAL '7 days';
 ```
 

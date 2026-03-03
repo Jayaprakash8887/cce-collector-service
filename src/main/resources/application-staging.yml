@@ -1,0 +1,14 @@
+# ============================================================
+# CCE Collector Service — Staging Profile
+# ============================================================
+
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 15
+      minimum-idle: 5
+
+logging:
+  level:
+    org.openphc.cce.collector: INFO
+    org.springframework.kafka: INFO

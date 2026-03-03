@@ -1,0 +1,36 @@
+# ============================================================
+# CCE Collector Service — Test Profile
+# ============================================================
+# Used by @ActiveProfiles("test") in integration tests.
+# Disables Flyway and Kafka to allow unit/context tests to run
+# without external infrastructure.
+# ============================================================
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+
+  flyway:
+    enabled: false
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      properties:
+        enable.idempotence: false
+
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
+
+logging:
+  level:
+    org.openphc.cce.collector: DEBUG

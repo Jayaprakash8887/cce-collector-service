@@ -14,23 +14,21 @@ Every HTTP request is persisted **as-is** before processing. Used for audit trai
 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
-| `id` | `UUID` | No | `gen_random_uuid()` | Primary key |
-| `cloudevents_id` | `VARCHAR` | No | — | CloudEvents `id` from the source system |
-| `source` | `VARCHAR` | No | — | CloudEvents `source` (e.g., `rhie-mediator`, `ebuzima/kigali-south`) |
-| `type` | `VARCHAR` | No | — | CloudEvents `type` as received from emitter adaptor |
-| `spec_version` | `VARCHAR` | No | `'1.0'` | CloudEvents spec version |
-| `subject` | `VARCHAR` | Yes | — | Patient UPID (e.g., `260225-0002-5501`) |
+| `id` | `UUID` | No | — | Primary key (UUIDv7, application-generated, time-ordered) |
+| `cloudevents_id` | `VARCHAR(50)` | No | — | CloudEvents `id` from the source system |
+| `source` | `VARCHAR(100)` | No | — | CloudEvents `source` (e.g., `rhie-mediator`, `ebuzima/kigali-south`) |
+| `type` | `VARCHAR(100)` | No | — | CloudEvents `type` as received from emitter adaptor |
+| `spec_version` | `VARCHAR(10)` | No | `'1.0'` | CloudEvents spec version |
+| `subject` | `VARCHAR(100)` | Yes | — | Patient UPID (e.g., `260225-0002-5501`) |
 | `event_time` | `TIMESTAMPTZ` | Yes | — | Source-provided event time |
-| `data_content_type` | `VARCHAR` | Yes | `'application/fhir+json'` | MIME type of `data` payload |
-| `facility_id` | `VARCHAR` | Yes | — | Healthcare facility FOSA ID |
-| `correlation_id` | `VARCHAR` | Yes | — | Distributed tracing ID |
-| `source_event_id` | `VARCHAR` | Yes | — | Source system's internal event ID |
+| `data_content_type` | `VARCHAR(50)` | Yes | `'application/fhir+json'` | MIME type of `data` payload |
+| `facility_id` | `VARCHAR(100)` | Yes | — | Healthcare facility FOSA ID |
+| `correlation_id` | `VARCHAR(100)` | Yes | — | Distributed tracing ID |
+| `source_event_id` | `VARCHAR(100)` | Yes | — | Source system's internal event ID |
 | `raw_payload` | `JSONB` | No | — | Full original request body (immutable) |
-| `status` | `VARCHAR` | No | `'RECEIVED'` | Processing status (see `InboundStatus` enum) |
-| `rejection_reason` | `VARCHAR` | Yes | — | Rejection reason code (if status = `REJECTED`; see `RejectionReason` enum) |
+| `status` | `VARCHAR(20)` | No | `'RECEIVED'` | Processing status (see `InboundStatus` enum) |
+| `rejection_reason` | `VARCHAR(50)` | Yes | — | Rejection reason code (if status = `REJECTED`; see `RejectionReason` enum) |
 | `error_details` | `TEXT` | Yes | — | Stack trace or validation error messages |
-| `resolved` | `BOOLEAN` | No | `false` | Whether a rejected event has been resolved/acknowledged |
-| `resolved_at` | `TIMESTAMPTZ` | Yes | — | Resolution timestamp |
 | `received_at` | `TIMESTAMPTZ` | No | `now()` | Server-side receipt timestamp (UTC) |
 
 **Constraints:**
@@ -46,7 +44,7 @@ Every HTTP request is persisted **as-is** before processing. Used for audit trai
 | `idx_inbound_event_status` | `status` | Status-based filtering |
 | `idx_inbound_event_received` | `received_at` | Time-range queries, lookback dedup |
 | `idx_inbound_event_rejection` | `rejection_reason` | Rejection reason queries (WHERE status = 'REJECTED') |
-| `idx_inbound_event_unresolved` | `(status, resolved)` | Unresolved rejected event scans (WHERE status = 'REJECTED' AND resolved = false) |
+
 
 ---
 
@@ -90,7 +88,7 @@ Inbound requests use **lowercase** field names per the CloudEvents v1.0 specific
 | Field | Type | Validation | Example |
 |-------|------|------------|---------|
 | `specversion` | `string` | Must be `"1.0"` | `"1.0"` |
-| `id` | `string` | Non-empty, max 256 chars | `"evt-eb010001-0001-4000-8000-000000000001"` |
+| `id` | `string` | Non-empty, max 50 chars | `"evt-eb010001-0001-4000-8000-000000000001"` |
 | `source` | `string` | Non-empty URI or short identifier | `"rhie-mediator"` |
 | `type` | `string` | Non-empty (mandatory CloudEvents attribute, no format restriction) | `"org.openphc.cce.encounter"` |
 | `subject` | `string` | Non-empty patient UPID | `"260225-0002-5501"` |

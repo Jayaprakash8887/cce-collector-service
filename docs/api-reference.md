@@ -23,7 +23,7 @@ Ingest a single CloudEvents-formatted clinical event.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `specversion` | `string` | Yes | Must be `"1.0"` |
-| `id` | `string` | Yes | Unique event identifier from source (max 256 chars) |
+| `id` | `string` | Yes | Unique event identifier from source (max 50 chars) |
 | `source` | `string` | Yes | Event source URI (e.g., `ebuzima/kigali-south`) |
 | `type` | `string` | Yes | Event type (e.g., `cce.encounter.created`) |
 | `subject` | `string` | Yes | Patient UPID (e.g., `patient/UPI-RW-2024-000001`) |
@@ -137,7 +137,6 @@ List rejected events with pagination. Queries `inbound_event` where `status = 'R
 | `page` | `int` | `0` | Page number (zero-based) |
 | `size` | `int` | `20` | Page size |
 | `rejectionReason` | `string` | — | Filter by rejection reason (e.g., `INVALID_FHIR`) |
-| `resolved` | `boolean` | — | Filter by resolution status |
 
 #### Response
 
@@ -152,7 +151,6 @@ List rejected events with pagination. Queries `inbound_event` where `status = 'R
         "eventType": "cce.encounter.created",
         "rejectionReason": "INVALID_FHIR",
         "errorDetails": "Unable to parse FHIR resource",
-        "resolved": false,
         "receivedAt": "2025-01-15T09:30:05Z"
       }
     ],
@@ -259,7 +257,7 @@ Multi-word field names follow the CloudEvents convention of concatenated lowerca
 | Field | Rule |
 |-------|------|
 | `specversion` | Must be `"1.0"` |
-| `id` | Required, non-blank, max 256 characters |
+| `id` | Required, non-blank, max 50 characters |
 | `source` | Required, non-blank |
 | `type` | Required, non-blank |
 | `subject` | Required, non-blank (CCE-specific requirement — patient UPID) |
@@ -280,7 +278,7 @@ Multi-word field names follow the CloudEvents convention of concatenated lowerca
 
 | Constraint | Value |
 |-----------|-------|
-| Max event ID length | 256 characters |
+| Max event ID length | 50 characters |
 | Dedup lookback window | 30 days (configurable) |
 | Kafka publish retries | 3 (producer-level) |
 | Max payload size | 1 MB |
