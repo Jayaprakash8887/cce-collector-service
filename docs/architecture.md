@@ -176,7 +176,7 @@ One table owned by this service, managed by Flyway:
 inbound_event  (single table — audit, dedup, rejection tracking)
 ```
 
-> **Note:** Rejected events are tracked directly on `inbound_event` via `status`, `rejection_reason`, `error_details`, and `resolved`/`resolved_at` columns. 
+> **Note:** Rejected events are tracked directly on `inbound_event` via `status`, `rejection_reason`, and `error_details` columns. 
 
 ### Deduplication Constraints
 

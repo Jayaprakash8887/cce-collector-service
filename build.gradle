@@ -42,6 +42,9 @@ dependencies {
     implementation 'org.flywaydb:flyway-core'
     implementation 'org.flywaydb:flyway-database-postgresql'
 
+    // UUIDv7
+    implementation 'com.fasterxml.uuid:java-uuid-generator:5.0.0'
+
     // HAPI FHIR
     implementation "ca.uhn.hapi.fhir:hapi-fhir-structures-r4:${hapiFhirVersion}"
     implementation "ca.uhn.hapi.fhir:hapi-fhir-validation:${hapiFhirVersion}"
