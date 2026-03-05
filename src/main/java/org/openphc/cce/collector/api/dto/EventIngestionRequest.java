@@ -1,14 +1,13 @@
 package org.openphc.cce.collector.api.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.util.Map;
 
 /**
  * Inbound DTO for CloudEvents v1.0 event ingestion.
@@ -61,7 +60,7 @@ public class EventIngestionRequest {
     // ─── CloudEvents data ──────────────────────────────────────────
 
     @NotNull(message = "data is required")
-    private Map<String, Object> data;
+    private JsonNode data;
 
     // ─── CCE extension attributes (lowercase per CloudEvents spec) ─
 

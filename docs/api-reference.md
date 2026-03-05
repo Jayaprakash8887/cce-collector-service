@@ -211,6 +211,8 @@ Standard Spring Boot Actuator endpoints:
 
 ### Success Envelope (`ApiResponse`)
 
+Wraps an `EventIngestionResponse` payload in a standard `{"data": ...}` envelope.
+
 ```json
 {
   "data": { ... }

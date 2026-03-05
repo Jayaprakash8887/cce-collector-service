@@ -80,7 +80,7 @@ class DtoSerializationTest {
             assertThat(req.getFacilityid()).isEqualTo("0001");
             assertThat(req.getCorrelationid()).isEqualTo("corr-abc-123");
             assertThat(req.getSourceeventid()).isEqualTo("enc-001");
-            assertThat(req.getData()).containsEntry("resourceType", "Encounter");
+            assertThat(req.getData().get("resourceType").asText()).isEqualTo("Encounter");
         }
 
         @Test
@@ -133,7 +133,7 @@ class DtoSerializationTest {
                     .subject("patient-1")
                     .datacontenttype("application/json")
                     .correlationid("corr-123")
-                    .data(Map.of("key", "value"))
+                    .data(mapper.valueToTree(Map.of("key", "value")))
                     .build();
 
             String json = mapper.writeValueAsString(req);
@@ -164,7 +164,7 @@ class DtoSerializationTest {
                     .source("rhie-mediator")
                     .type("org.openphc.cce.encounter")
                     .subject("260115-0001-7823")
-                    .data(Map.of("resourceType", "Encounter"))
+                    .data(mapper.valueToTree(Map.of("resourceType", "Encounter")))
                     .build();
         }
 
@@ -269,7 +269,7 @@ class DtoSerializationTest {
                     .datacontenttype("application/fhir+json")
                     .correlationid("corr-abc")
                     .facilityid("0001")
-                    .data(Map.of("resourceType", "Encounter"))
+                    .data(mapper.valueToTree(Map.of("resourceType", "Encounter")))
                     .build();
 
             JsonNode node = mapper.valueToTree(msg);
@@ -344,30 +344,39 @@ class DtoSerializationTest {
     class ApiResponseSerialization {
 
         @Test
-        @DisplayName("wraps payload in 'data' envelope")
+        @DisplayName("wraps EventIngestionResponse in 'data' envelope")
         void dataEnvelope() throws Exception {
-            ApiResponse<String> response = ApiResponse.of("hello");
-            JsonNode node = mapper.valueToTree(response);
-
-            assertThat(node.has("data")).isTrue();
-            assertThat(node.get("data").asText()).isEqualTo("hello");
-        }
-
-        @Test
-        @DisplayName("wraps complex object in 'data' envelope")
-        void complexEnvelope() throws Exception {
             EventIngestionResponse inner = EventIngestionResponse.builder()
                     .eventId("uuid-123")
                     .cloudEventsId("evt-001")
                     .status("accepted")
                     .build();
 
-            ApiResponse<EventIngestionResponse> response = ApiResponse.of(inner);
+            ApiResponse response = ApiResponse.of(inner);
             JsonNode node = mapper.valueToTree(response);
 
             assertThat(node.has("data")).isTrue();
             assertThat(node.get("data").get("eventId").asText()).isEqualTo("uuid-123");
             assertThat(node.get("data").get("status").asText()).isEqualTo("accepted");
+        }
+
+        @Test
+        @DisplayName("factory method creates correct structure")
+        void factoryMethod() {
+            EventIngestionResponse inner = EventIngestionResponse.builder()
+                    .eventId("uuid-456")
+                    .cloudEventsId("evt-002")
+                    .status("accepted")
+                    .correlationId("corr-xyz")
+                    .build();
+
+            ApiResponse response = ApiResponse.of(inner);
+
+            assertThat(response.data()).isNotNull();
+            assertThat(response.data().getEventId()).isEqualTo("uuid-456");
+            assertThat(response.data().getCloudEventsId()).isEqualTo("evt-002");
+            assertThat(response.data().getStatus()).isEqualTo("accepted");
+            assertThat(response.data().getCorrelationId()).isEqualTo("corr-xyz");
         }
     }
 

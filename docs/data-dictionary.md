@@ -134,7 +134,7 @@ Published to `cce.events.inbound` using **CloudEvents spec field names (lowercas
 | `protocoldefinitionid` | `String` | Yes | (usually null — Compliance Service resolves) |
 | `actionid` | `String` | Yes | (usually null — Compliance Service resolves) |
 | `facilityid` | `String` | Yes | `inbound_event.facility_id` |
-| `data` | `Map<String, Object>` | No | `inbound_event.raw_payload` (FHIR R4 resource or JSON object) |
+| `data` | `JsonNode` | No | `inbound_event.raw_payload` (FHIR R4 resource or JSON object) |
 
 ---
 

@@ -1,13 +1,13 @@
 package org.openphc.cce.collector.api.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.OffsetDateTime;
-import java.util.Map;
 
 /**
  * Kafka message DTO published to {@code cce.events.inbound}.
@@ -55,5 +55,5 @@ public class CloudEventMessage {
     // ─── Payload ───────────────────────────────────────────────────
 
     /** FHIR R4 resource or valid JSON object. */
-    private Map<String, Object> data;
+    private JsonNode data;
 }

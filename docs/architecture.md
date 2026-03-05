@@ -107,7 +107,7 @@ org.openphc.cce.collector/
 │   │   ├── EventIngestionController.java  #   POST /v1/events
 │   │   └── RejectedEventController.java   #   Rejected event queries and resolution
 │   ├── dto/                               # Request/response data transfer objects
-│   │   ├── ApiResponse.java               #   { "data": ... } envelope
+│   │   ├── ApiResponse.java               #   { "data": EventIngestionResponse } envelope
 │   │   ├── ApiError.java                  #   { "error": { "code", "message" } }
 │   │   ├── EventIngestionRequest.java     #   CloudEvents envelope (inbound DTO)
 │   │   ├── EventIngestionResponse.java    #   Accepted/rejected receipt
