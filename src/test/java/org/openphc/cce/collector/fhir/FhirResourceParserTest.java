@@ -45,7 +45,7 @@ class FhirResourceParserTest {
         @Test
         @DisplayName("returns resourceType from node")
         void returnsResourceType() {
-            JsonNode data = mapper.valueToTree(Map.of("resourceType", "encounter"));
+            JsonNode data = mapper.valueToTree(Map.of("resourceType", "Encounter"));
             assertThat(parser.detectResourceType(data)).isEqualTo("Encounter");
         }
 
