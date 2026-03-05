@@ -1,6 +1,7 @@
 # ===== Build output =====
 build/
 target/
+bin/
 
 # ===== IDE files =====
 .idea/
