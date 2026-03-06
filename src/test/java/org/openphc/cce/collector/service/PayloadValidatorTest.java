@@ -10,10 +10,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.openphc.cce.collector.api.dto.EventIngestionRequest;
-import org.openphc.cce.collector.api.exception.FhirValidationException;
+import org.openphc.cce.collector.api.exception.PayloadValidationException;
 import org.openphc.cce.collector.domain.model.enums.RejectionReason;
 import org.openphc.cce.collector.fhir.FhirResourceValidator;
-import org.openphc.cce.collector.fhir.FhirValidationResult;
 
 import java.util.List;
 import java.util.Map;
@@ -27,21 +26,21 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Unit tests for {@link FhirPayloadValidator}.
+ * Unit tests for {@link PayloadValidator}.
  * Uses Mockito to isolate from {@link FhirResourceValidator}.
  */
 @ExtendWith(MockitoExtension.class)
-class FhirPayloadValidatorTest {
+class PayloadValidatorTest {
 
     @Mock
     private FhirResourceValidator fhirResourceValidator;
 
-    private FhirPayloadValidator payloadValidator;
+    private PayloadValidator payloadValidator;
     private static final ObjectMapper mapper = new ObjectMapper();
 
     @BeforeEach
     void setup() {
-        payloadValidator = new FhirPayloadValidator(fhirResourceValidator);
+        payloadValidator = new PayloadValidator(fhirResourceValidator);
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -56,12 +55,12 @@ class FhirPayloadValidatorTest {
         @DisplayName("valid FHIR resource with explicit content type passes")
         void validFhirWithExplicitContentType() {
             EventIngestionRequest req = buildRequest("application/fhir+json");
-            FhirValidationResult validResult = validFhirResult();
+            PayloadValidationResult validResult = validFhirResult();
 
             when(fhirResourceValidator.validate(eq(req.getData()), eq(req.getSubject())))
                     .thenReturn(validResult);
 
-            FhirValidationResult result = payloadValidator.validatePayload(req);
+            PayloadValidationResult result = payloadValidator.validatePayload(req);
 
             assertThat(result.isValid()).isTrue();
             verify(fhirResourceValidator).validate(any(), any());
@@ -71,12 +70,12 @@ class FhirPayloadValidatorTest {
         @DisplayName("absent datacontenttype defaults to FHIR validation")
         void absentContentTypeDefaultsToFhir() {
             EventIngestionRequest req = buildRequest(null);
-            FhirValidationResult validResult = validFhirResult();
+            PayloadValidationResult validResult = validFhirResult();
 
             when(fhirResourceValidator.validate(eq(req.getData()), eq(req.getSubject())))
                     .thenReturn(validResult);
 
-            FhirValidationResult result = payloadValidator.validatePayload(req);
+            PayloadValidationResult result = payloadValidator.validatePayload(req);
 
             assertThat(result.isValid()).isTrue();
             verify(fhirResourceValidator).validate(any(), any());
@@ -86,7 +85,7 @@ class FhirPayloadValidatorTest {
         @DisplayName("invalid FHIR resource throws with INVALID_FHIR")
         void invalidFhirThrows() {
             EventIngestionRequest req = buildRequest("application/fhir+json");
-            FhirValidationResult invalidResult = FhirValidationResult.builder()
+            PayloadValidationResult invalidResult = PayloadValidationResult.builder()
                     .valid(false)
                     .errors(List.of("data.resourceType is required for FHIR resources"))
                     .warnings(List.of())
@@ -95,8 +94,8 @@ class FhirPayloadValidatorTest {
 
             when(fhirResourceValidator.validate(any(), any())).thenReturn(invalidResult);
 
-            FhirValidationException ex = catchThrowableOfType(
-                    FhirValidationException.class,
+            PayloadValidationException ex = catchThrowableOfType(
+                    PayloadValidationException.class,
                     () -> payloadValidator.validatePayload(req));
 
             assertThat(ex.getRejectionReason()).isEqualTo(RejectionReason.INVALID_FHIR);
@@ -108,7 +107,7 @@ class FhirPayloadValidatorTest {
         @DisplayName("FHIR warnings are propagated in result")
         void warningsPropagated() {
             EventIngestionRequest req = buildRequest("application/fhir+json");
-            FhirValidationResult resultWithWarnings = FhirValidationResult.builder()
+            PayloadValidationResult resultWithWarnings = PayloadValidationResult.builder()
                     .valid(true)
                     .errors(List.of())
                     .warnings(List.of("data.subject.reference mismatch"))
@@ -117,7 +116,7 @@ class FhirPayloadValidatorTest {
 
             when(fhirResourceValidator.validate(any(), any())).thenReturn(resultWithWarnings);
 
-            FhirValidationResult result = payloadValidator.validatePayload(req);
+            PayloadValidationResult result = payloadValidator.validatePayload(req);
 
             assertThat(result.isValid()).isTrue();
             assertThat(result.getWarnings()).containsExactly("data.subject.reference mismatch");
@@ -137,7 +136,7 @@ class FhirPayloadValidatorTest {
         void nonEmptyJsonPasses() {
             EventIngestionRequest req = buildRequest("application/json");
 
-            FhirValidationResult result = payloadValidator.validatePayload(req);
+            PayloadValidationResult result = payloadValidator.validatePayload(req);
 
             assertThat(result.isValid()).isTrue();
             assertThat(result.getParsedResource()).isNull();
@@ -157,8 +156,8 @@ class FhirPayloadValidatorTest {
                     .data(mapper.valueToTree(Map.of()))
                     .build();
 
-            FhirValidationException ex = catchThrowableOfType(
-                    FhirValidationException.class,
+            PayloadValidationException ex = catchThrowableOfType(
+                    PayloadValidationException.class,
                     () -> payloadValidator.validatePayload(req));
 
             assertThat(ex.getRejectionReason()).isEqualTo(RejectionReason.INVALID_JSON);
@@ -180,8 +179,8 @@ class FhirPayloadValidatorTest {
         void textXmlRejected() {
             EventIngestionRequest req = buildRequest("text/xml");
 
-            FhirValidationException ex = catchThrowableOfType(
-                    FhirValidationException.class,
+            PayloadValidationException ex = catchThrowableOfType(
+                    PayloadValidationException.class,
                     () -> payloadValidator.validatePayload(req));
 
             assertThat(ex.getRejectionReason())
@@ -195,8 +194,8 @@ class FhirPayloadValidatorTest {
         void textPlainRejected() {
             EventIngestionRequest req = buildRequest("text/plain");
 
-            FhirValidationException ex = catchThrowableOfType(
-                    FhirValidationException.class,
+            PayloadValidationException ex = catchThrowableOfType(
+                    PayloadValidationException.class,
                     () -> payloadValidator.validatePayload(req));
 
             assertThat(ex.getRejectionReason())
@@ -210,8 +209,8 @@ class FhirPayloadValidatorTest {
         void arbitraryContentTypeRejected() {
             EventIngestionRequest req = buildRequest("application/x-custom");
 
-            FhirValidationException ex = catchThrowableOfType(
-                    FhirValidationException.class,
+            PayloadValidationException ex = catchThrowableOfType(
+                    PayloadValidationException.class,
                     () -> payloadValidator.validatePayload(req));
 
             assertThat(ex.getRejectionReason())
@@ -233,8 +232,8 @@ class FhirPayloadValidatorTest {
                 .build();
     }
 
-    private FhirValidationResult validFhirResult() {
-        return FhirValidationResult.builder()
+    private PayloadValidationResult validFhirResult() {
+        return PayloadValidationResult.builder()
                 .valid(true)
                 .errors(List.of())
                 .warnings(List.of())

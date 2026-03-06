@@ -4,10 +4,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.hl7.fhir.instance.model.api.IBaseResource;
+import org.openphc.cce.collector.api.exception.PatientIdNotFoundException;
+import org.openphc.cce.collector.service.PayloadValidationResult;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Performs FHIR R4 structural validation on the {@code data} payload.
@@ -21,7 +24,7 @@ import java.util.List;
  * <ol>
  *   <li>{@code data.resourceType} present and non-empty — required</li>
  *   <li>HAPI FHIR can parse the data into {@link IBaseResource} — required</li>
- *   <li>{@code data.subject.reference} matches CloudEvents {@code subject} — warning only</li>
+ *   <li>Patient ID extracted from parsed resource matches CloudEvents {@code subject} — rejects on mismatch or extraction failure</li>
  * </ol>
  */
 @Slf4j
@@ -30,6 +33,7 @@ import java.util.List;
 public class FhirResourceValidator {
 
     private final FhirResourceParser parser;
+    private final PatientIdExtractor patientIdExtractor;
 
     /**
      * Validate the FHIR payload.
@@ -39,7 +43,7 @@ public class FhirResourceValidator {
      * @return validation result with errors, warnings, and the parsed resource
      *         (if parsing succeeded)
      */
-    public FhirValidationResult validate(JsonNode data, String subject) {
+    public PayloadValidationResult validate(JsonNode data, String subject) {
         List<String> errors = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
 
@@ -59,36 +63,36 @@ public class FhirResourceValidator {
             return buildResult(errors, warnings, null);
         }
 
-        // Check: subject reference (warning only, does not reject)
-        checkSubjectReference(data, subject, warnings);
+        // Check: subject reference — rejects on mismatch or extraction failure
+        checkSubjectReference(parsedResource, subject, errors);
 
         return buildResult(errors, warnings, parsedResource);
     }
 
-    private void checkSubjectReference(JsonNode data, String subject,
-                                       List<String> warnings) {
+    private void checkSubjectReference(IBaseResource parsedResource, String subject,
+                                       List<String> errors) {
         if (subject == null) {
             return;
         }
 
-        JsonNode subjectNode = data.get("subject");
-        if (subjectNode != null && subjectNode.isObject()) {
-            JsonNode reference = subjectNode.get("reference");
-            if (reference != null && !reference.isNull()) {
-                String refStr = reference.asText();
-                if (!refStr.contains(subject)) {
-                    warnings.add("data.subject.reference '" + refStr
-                            + "' does not match CloudEvents subject '" + subject + "'");
-                    log.warn("Subject mismatch: data.subject.reference='{}' "
-                            + "does not match CloudEvents subject='{}'", refStr, subject);
-                }
+        try {
+            String extractedPatientId = patientIdExtractor.extract(parsedResource);
+            if (!Objects.equals(extractedPatientId, subject)) {
+                errors.add("Extracted patient ID '" + extractedPatientId
+                        + "' does not match CloudEvents subject '" + subject + "'");
+                log.warn("Subject mismatch: extracted patient ID='{}' "
+                        + "does not match CloudEvents subject='{}'", extractedPatientId, subject);
             }
+        } catch (PatientIdNotFoundException e) {
+            // No patient reference found — reject the event
+            errors.add("Patient ID extraction failed for subject '" + subject + "': " + e.getMessage());
+            log.warn("Patient ID extraction failed for subject '{}': {}", subject, e.getMessage());
         }
     }
 
-    private FhirValidationResult buildResult(List<String> errors, List<String> warnings,
+    private PayloadValidationResult buildResult(List<String> errors, List<String> warnings,
                                              IBaseResource resource) {
-        return FhirValidationResult.builder()
+        return PayloadValidationResult.builder()
                 .valid(errors.isEmpty())
                 .errors(List.copyOf(errors))
                 .warnings(List.copyOf(warnings))

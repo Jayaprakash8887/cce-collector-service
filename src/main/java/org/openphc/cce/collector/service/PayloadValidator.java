@@ -3,10 +3,9 @@ package org.openphc.cce.collector.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import org.openphc.cce.collector.api.dto.EventIngestionRequest;
-import org.openphc.cce.collector.api.exception.FhirValidationException;
+import org.openphc.cce.collector.api.exception.PayloadValidationException;
 import org.openphc.cce.collector.domain.model.enums.RejectionReason;
 import org.openphc.cce.collector.fhir.FhirResourceValidator;
-import org.openphc.cce.collector.fhir.FhirValidationResult;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -23,7 +22,7 @@ import java.util.List;
  */
 @Service
 @RequiredArgsConstructor
-public class FhirPayloadValidator {
+public class PayloadValidator {
 
     private static final String FHIR_JSON = "application/fhir+json";
     private static final String PLAIN_JSON = "application/json";
@@ -35,9 +34,9 @@ public class FhirPayloadValidator {
      *
      * @param request the inbound CloudEvents request
      * @return validation result (may contain warnings)
-     * @throws FhirValidationException if validation fails
+     * @throws PayloadValidationException if validation fails
      */
-    public FhirValidationResult validatePayload(EventIngestionRequest request) {
+    public PayloadValidationResult validatePayload(EventIngestionRequest request) {
         String contentType = request.getDatacontenttype();
 
         if (contentType == null || FHIR_JSON.equals(contentType)) {
@@ -45,29 +44,29 @@ public class FhirPayloadValidator {
         } else if (PLAIN_JSON.equals(contentType)) {
             return validateJson(request.getData());
         } else {
-            throw new FhirValidationException(
+            throw new PayloadValidationException(
                     List.of("Unsupported content type: " + contentType),
                     RejectionReason.UNSUPPORTED_CONTENT_TYPE);
         }
     }
 
-    private FhirValidationResult validateFhir(EventIngestionRequest request) {
-        FhirValidationResult result = fhirResourceValidator.validate(
+    private PayloadValidationResult validateFhir(EventIngestionRequest request) {
+        PayloadValidationResult result = fhirResourceValidator.validate(
                 request.getData(), request.getSubject());
 
         if (!result.isValid()) {
-            throw new FhirValidationException(result.getErrors(), RejectionReason.INVALID_FHIR);
+            throw new PayloadValidationException(result.getErrors(), RejectionReason.INVALID_FHIR);
         }
         return result;
     }
 
-    private FhirValidationResult validateJson(JsonNode data) {
+    private PayloadValidationResult validateJson(JsonNode data) {
         if (data == null || data.isEmpty()) {
-            throw new FhirValidationException(
+            throw new PayloadValidationException(
                     List.of("JSON payload must be a non-empty object"),
                     RejectionReason.INVALID_JSON);
         }
-        return FhirValidationResult.builder()
+        return PayloadValidationResult.builder()
                 .valid(true)
                 .errors(List.of())
                 .warnings(List.of())

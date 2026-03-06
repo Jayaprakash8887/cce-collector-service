@@ -13,12 +13,12 @@ import java.util.List;
  * correct rejection status on the {@code inbound_event} record.</p>
  */
 @Getter
-public class FhirValidationException extends RuntimeException {
+public class PayloadValidationException extends RuntimeException {
 
     private final List<String> validationErrors;
     private final RejectionReason rejectionReason;
 
-    public FhirValidationException(List<String> validationErrors, RejectionReason rejectionReason) {
+    public PayloadValidationException(List<String> validationErrors, RejectionReason rejectionReason) {
         super("Payload validation failed: " + String.join("; ", validationErrors));
         this.validationErrors = List.copyOf(validationErrors);
         this.rejectionReason = rejectionReason;

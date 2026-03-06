@@ -1,4 +1,4 @@
-package org.openphc.cce.collector.fhir;
+package org.openphc.cce.collector.service;
 
 import lombok.Builder;
 import lombok.Getter;
@@ -7,15 +7,14 @@ import org.hl7.fhir.instance.model.api.IBaseResource;
 import java.util.List;
 
 /**
- * Result of FHIR resource validation.
+ * Result of payload validation (FHIR or JSON).
  *
  * <p>Contains errors (validation failures that reject the event) and warnings
- * (informational messages that do not prevent acceptance — e.g. subject
- * reference mismatch).</p>
+ * (informational messages that do not prevent acceptance).</p>
  */
 @Getter
 @Builder
-public class FhirValidationResult {
+public class PayloadValidationResult {
 
     private final boolean valid;
     private final List<String> errors;

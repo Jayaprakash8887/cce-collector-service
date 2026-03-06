@@ -10,6 +10,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.openphc.cce.collector.service.PayloadValidationResult;
 
 import java.util.HashMap;
 import java.util.List;
@@ -30,7 +31,8 @@ class FhirResourceValidatorTest {
     static void setup() {
         FhirContext ctx = FhirContext.forR4();
         FhirResourceParser parser = new FhirResourceParser(ctx);
-        validator = new FhirResourceValidator(parser);
+        PatientIdExtractor patientIdExtractor = new PatientIdExtractor();
+        validator = new FhirResourceValidator(parser, patientIdExtractor);
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -44,7 +46,7 @@ class FhirResourceValidatorTest {
         @Test
         @DisplayName("valid Encounter passes without errors")
         void validEncounter() {
-            FhirValidationResult result = validator.validate(
+            PayloadValidationResult result = validator.validate(
                     FhirResourceParserTest.validEncounter(), "UPID-12345");
 
             assertThat(result.isValid()).isTrue();
@@ -55,7 +57,7 @@ class FhirResourceValidatorTest {
         @Test
         @DisplayName("valid Observation passes without errors")
         void validObservation() {
-            FhirValidationResult result = validator.validate(
+            PayloadValidationResult result = validator.validate(
                     FhirResourceParserTest.validObservation(), "UPID-12345");
 
             assertThat(result.isValid()).isTrue();
@@ -66,7 +68,7 @@ class FhirResourceValidatorTest {
         @Test
         @DisplayName("valid Condition passes without errors")
         void validCondition() {
-            FhirValidationResult result = validator.validate(
+            PayloadValidationResult result = validator.validate(
                     FhirResourceParserTest.validCondition(), "UPID-12345");
 
             assertThat(result.isValid()).isTrue();
@@ -88,7 +90,7 @@ class FhirResourceValidatorTest {
         void missingResourceType() {
             JsonNode data = mapper.valueToTree(Map.of("id", "example", "status", "finished"));
 
-            FhirValidationResult result = validator.validate(data, "UPID-12345");
+            PayloadValidationResult result = validator.validate(data, "UPID-12345");
 
             assertThat(result.isValid()).isFalse();
             assertThat(result.getErrors())
@@ -105,7 +107,7 @@ class FhirResourceValidatorTest {
                     "resourceType", "   ",
                     "id", "example"));
 
-            FhirValidationResult result = validator.validate(data, "UPID-12345");
+            PayloadValidationResult result = validator.validate(data, "UPID-12345");
 
             assertThat(result.isValid()).isFalse();
             assertThat(result.getErrors())
@@ -130,7 +132,7 @@ class FhirResourceValidatorTest {
                     "resourceType", "UnknownFooBar",
                     "id", "example"));
 
-            FhirValidationResult result = validator.validate(data, "UPID-12345");
+            PayloadValidationResult result = validator.validate(data, "UPID-12345");
 
             assertThat(result.isValid()).isFalse();
             assertThat(result.getErrors())
@@ -150,30 +152,30 @@ class FhirResourceValidatorTest {
     class SubjectReferenceCheck {
 
         @Test
-        @DisplayName("matching subject produces no warning")
+        @DisplayName("matching subject produces no error")
         void matchingSubject() {
-            FhirValidationResult result = validator.validate(
+            PayloadValidationResult result = validator.validate(
                     FhirResourceParserTest.validEncounter(), "UPID-12345");
 
             assertThat(result.isValid()).isTrue();
-            assertThat(result.getWarnings()).isEmpty();
+            assertThat(result.getErrors()).isEmpty();
         }
 
         @Test
-        @DisplayName("mismatching subject produces warning but is still valid")
+        @DisplayName("mismatching subject produces error and rejects")
         void mismatchingSubject() {
-            FhirValidationResult result = validator.validate(
+            PayloadValidationResult result = validator.validate(
                     FhirResourceParserTest.validEncounter(), "UPID-99999");
 
-            assertThat(result.isValid()).isTrue();
-            assertThat(result.getWarnings())
+            assertThat(result.isValid()).isFalse();
+            assertThat(result.getErrors())
                     .hasSize(1)
                     .first().asString()
                     .contains("does not match");
         }
 
         @Test
-        @DisplayName("no subject in data produces no warning")
+        @DisplayName("no subject in data produces error and rejects")
         void noSubjectInData() {
             Map<String, Object> dataMap = new HashMap<>();
             dataMap.put("resourceType", "Encounter");
@@ -184,20 +186,23 @@ class FhirResourceValidatorTest {
                     "code", "AMB"));
             JsonNode data = mapper.valueToTree(dataMap);
 
-            FhirValidationResult result = validator.validate(data, "UPID-12345");
+            PayloadValidationResult result = validator.validate(data, "UPID-12345");
 
-            assertThat(result.isValid()).isTrue();
-            assertThat(result.getWarnings()).isEmpty();
+            assertThat(result.isValid()).isFalse();
+            assertThat(result.getErrors())
+                    .hasSize(1)
+                    .first().asString()
+                    .contains("Patient ID extraction failed");
         }
 
         @Test
-        @DisplayName("null subject parameter produces no warning")
+        @DisplayName("null subject parameter skips check — no error")
         void nullSubjectParam() {
-            FhirValidationResult result = validator.validate(
+            PayloadValidationResult result = validator.validate(
                     FhirResourceParserTest.validEncounter(), null);
 
             assertThat(result.isValid()).isTrue();
-            assertThat(result.getWarnings()).isEmpty();
+            assertThat(result.getErrors()).isEmpty();
         }
     }
 }
