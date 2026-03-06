@@ -19,7 +19,6 @@ import java.util.UUID;
  * <ol>
  *   <li>{@code correlationId} — generated as {@code "corr-" + UUID} if absent</li>
  *   <li>{@code eventTime} — filled with the server's {@code receivedAt} timestamp if absent</li>
- *   <li>{@code dataContentType} — defaulted to {@code "application/fhir+json"} if absent</li>
  * </ol>
  *
  * <p>The request DTO is treated as <strong>read-only</strong> — it is never
@@ -32,7 +31,6 @@ import java.util.UUID;
 @Service
 public class EventDefaultsEnricher {
 
-    private static final String DEFAULT_DATA_CONTENT_TYPE = "application/fhir+json";
     private static final String CORRELATION_ID_PREFIX = "corr-";
 
     /**
@@ -48,7 +46,6 @@ public class EventDefaultsEnricher {
     public void enrich(EventIngestionRequest request, InboundEvent inbound) {
         enrichCorrelationId(request, inbound);
         enrichTime(request, inbound);
-        enrichDataContentType(request, inbound);
     }
 
     /**
@@ -73,18 +70,6 @@ public class EventDefaultsEnricher {
             log.debug("Filled eventTime from server receivedAt: {}", inbound.getReceivedAt());
         } else {
             inbound.setEventTime(OffsetDateTime.parse(request.getTime()));
-        }
-    }
-
-    /**
-     * Default {@code dataContentType} to {@code "application/fhir+json"} if absent.
-     */
-    private void enrichDataContentType(EventIngestionRequest request, InboundEvent inbound) {
-        if (isBlank(request.getDatacontenttype())) {
-            inbound.setDataContentType(DEFAULT_DATA_CONTENT_TYPE);
-            log.debug("Defaulted dataContentType to {}", DEFAULT_DATA_CONTENT_TYPE);
-        } else {
-            inbound.setDataContentType(request.getDatacontenttype());
         }
     }
 

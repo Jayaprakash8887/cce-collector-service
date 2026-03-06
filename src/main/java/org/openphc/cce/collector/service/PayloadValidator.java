@@ -14,7 +14,7 @@ import java.util.List;
  * Orchestrates payload validation by branching on {@code datacontenttype}.
  *
  * <ul>
- *   <li>{@code application/fhir+json} (or absent — default) → full FHIR R4
+ *   <li>{@code application/fhir+json} → full FHIR R4
  *       structural validation via {@link FhirResourceValidator}</li>
  *   <li>{@code application/json} → basic JSON validity check (non-empty object)</li>
  *   <li>Any other value → reject with {@code UNSUPPORTED_CONTENT_TYPE}</li>
@@ -39,7 +39,7 @@ public class PayloadValidator {
     public PayloadValidationResult validatePayload(EventIngestionRequest request) {
         String contentType = request.getDatacontenttype();
 
-        if (contentType == null || FHIR_JSON.equals(contentType)) {
+        if (FHIR_JSON.equals(contentType)) {
             return validateFhir(request);
         } else if (PLAIN_JSON.equals(contentType)) {
             return validateJson(request.getData());

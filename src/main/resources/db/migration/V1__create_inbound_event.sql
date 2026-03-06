@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS inbound_event (
     spec_version        VARCHAR(10)     NOT NULL DEFAULT '1.0',
     subject             VARCHAR(100),
     event_time          TIMESTAMPTZ,
-    data_content_type   VARCHAR(50)     DEFAULT 'application/fhir+json',
+    data_content_type   VARCHAR(50)     NOT NULL,
     facility_id         VARCHAR(100),
     correlation_id      VARCHAR(100),
     source_event_id     VARCHAR(100),

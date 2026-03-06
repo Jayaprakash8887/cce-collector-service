@@ -287,7 +287,6 @@ class InboundEventRepositoryTest {
                     .build();
 
             assertThat(event.getSpecVersion()).isEqualTo("1.0");
-            assertThat(event.getDataContentType()).isEqualTo("application/fhir+json");
             assertThat(event.getStatus()).isEqualTo(InboundStatus.RECEIVED);
             assertThat(event.getReceivedAt()).isNotNull();
         }

@@ -28,7 +28,7 @@ Ingest a single CloudEvents-formatted clinical event.
 | `type` | `string` | Yes | Event type (e.g., `cce.encounter.created`) |
 | `subject` | `string` | Yes | Patient UPID (e.g., `patient/UPI-RW-2024-000001`) |
 | `time` | `string` | No | ISO-8601 timestamp (filled by server if absent) |
-| `datacontenttype` | `string` | No | MIME type of data (e.g., `application/fhir+json`) |
+| `datacontenttype` | `string` | Yes | MIME type of data (`application/fhir+json` or `application/json`) |
 | `data` | `object` | Yes | Event payload (FHIR R4 resource) |
 | `correlationid` | `string` | No | Trace correlation ID (generated if absent) |
 | `facilityid` | `string` | No | Facility identifier |

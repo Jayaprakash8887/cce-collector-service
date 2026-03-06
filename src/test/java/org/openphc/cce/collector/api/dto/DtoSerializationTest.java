@@ -110,13 +110,13 @@ class DtoSerializationTest {
                   "source": "test",
                   "type": "test.type",
                   "subject": "patient-1",
+                  "datacontenttype": "application/fhir+json",
                   "data": {}
                 }
                 """;
 
             EventIngestionRequest req = mapper.readValue(json, EventIngestionRequest.class);
             assertThat(req.getTime()).isNull();
-            assertThat(req.getDatacontenttype()).isNull();
             assertThat(req.getCorrelationid()).isNull();
             assertThat(req.getFacilityid()).isNull();
             assertThat(req.getSourceeventid()).isNull();
@@ -164,6 +164,7 @@ class DtoSerializationTest {
                     .source("rhie-mediator")
                     .type("org.openphc.cce.encounter")
                     .subject("260115-0001-7823")
+                    .datacontenttype("application/fhir+json")
                     .data(mapper.valueToTree(Map.of("resourceType", "Encounter")))
                     .build();
         }
@@ -234,7 +235,8 @@ class DtoSerializationTest {
                     "source is required",
                     "type is required",
                     "subject is required",
-                    "data is required"
+                    "data is required",
+                    "datacontenttype is required"
             );
         }
 

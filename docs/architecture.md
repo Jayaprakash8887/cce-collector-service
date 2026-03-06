@@ -147,7 +147,7 @@ org.openphc.cce.collector/
     a. Generate correlationid if absent (UUID with "corr-" prefix)
     b. Fill time with server received_at if absent
  7. Payload Validation
-    a. If datacontenttype = application/fhir+json (or absent — default):
+    a. If datacontenttype = application/fhir+json:
        i.   Parse data via HAPI FHIR
        ii.  Validate resourceType is present and parseable
        iii. Cross-check subject reference against envelope `subject` (reject on mismatch)
@@ -236,7 +236,7 @@ Kafka publish is **synchronous** within the HTTP request. On failure, the Collec
 
 The Collector supports two `datacontenttype` values, determining the level of payload validation applied:
 
-### `application/fhir+json` (default)
+### `application/fhir+json`
 
 FHIR R4 structural validation via HAPI FHIR.
 

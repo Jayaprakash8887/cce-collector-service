@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Unit tests for {@link EventDefaultsEnricher}.
  *
- * <p>Verifies the three enrichment rules and confirms that the request
+ * <p>Verifies the two enrichment rules and confirms that the request
  * DTO is never mutated. Only the entity receives enriched values.
  * No Spring context needed — pure unit tests.</p>
  */
@@ -40,6 +40,7 @@ class EventDefaultsEnricherTest {
                 .source("rhie-mediator")
                 .type("org.openphc.cce.encounter")
                 .subject("UPID-12345")
+                .datacontenttype("application/fhir+json")
                 .data(mapper.valueToTree(Map.of("resourceType", "Encounter")))
                 .build();
     }
@@ -165,41 +166,6 @@ class EventDefaultsEnricherTest {
     }
 
     // ════════════════════════════════════════════════════════════════
-    // datacontenttype enrichment
-    // ════════════════════════════════════════════════════════════════
-
-    @Nested
-    @DisplayName("datacontenttype enrichment")
-    class DataContentTypeEnrichment {
-
-        @Test
-        @DisplayName("defaults dataContentType to application/fhir+json when absent")
-        void defaultsWhenAbsent() {
-            EventIngestionRequest request = requestWithoutOptionals();
-            InboundEvent entity = baseEntity();
-
-            enricher.enrich(request, entity);
-
-            assertThat(entity.getDataContentType()).isEqualTo("application/fhir+json");
-            // Request is NOT mutated
-            assertThat(request.getDatacontenttype()).isNull();
-        }
-
-        @Test
-        @DisplayName("preserves dataContentType when present in request")
-        void preservesWhenPresent() {
-            EventIngestionRequest request = requestWithOptionals();
-            InboundEvent entity = baseEntity();
-
-            enricher.enrich(request, entity);
-
-            assertThat(entity.getDataContentType()).isEqualTo("application/json");
-            // Request is NOT mutated
-            assertThat(request.getDatacontenttype()).isEqualTo("application/json");
-        }
-    }
-
-    // ════════════════════════════════════════════════════════════════
     // Type pass-through (NEVER modified)
     // ════════════════════════════════════════════════════════════════
 
@@ -249,12 +215,10 @@ class EventDefaultsEnricherTest {
             enricher.enrich(request, entity);
 
             assertThat(entity.getCorrelationId()).isNotNull().startsWith("corr-");
-            assertThat(entity.getDataContentType()).isEqualTo("application/fhir+json");
             assertThat(entity.getEventTime()).isNotNull();
 
-            // Request remains untouched
+            // Request remains untouched for enriched fields
             assertThat(request.getCorrelationid()).isNull();
-            assertThat(request.getDatacontenttype()).isNull();
             assertThat(request.getTime()).isNull();
         }
 
@@ -267,7 +231,6 @@ class EventDefaultsEnricherTest {
             enricher.enrich(request, entity);
 
             assertThat(entity.getCorrelationId()).isEqualTo("existing-corr-id");
-            assertThat(entity.getDataContentType()).isEqualTo("application/json");
             assertThat(entity.getEventTime())
                     .isEqualTo(OffsetDateTime.parse("2026-03-01T10:00:00Z"));
         }

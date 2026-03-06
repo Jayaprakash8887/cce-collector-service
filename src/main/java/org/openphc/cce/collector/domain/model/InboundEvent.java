@@ -59,8 +59,7 @@ public class InboundEvent {
     private OffsetDateTime eventTime;
 
     @Column(name = "data_content_type", length = 50)
-    @Builder.Default
-    private String dataContentType = "application/fhir+json";
+    private String dataContentType;
 
     @Column(name = "facility_id", length = 100)
     private String facilityId;

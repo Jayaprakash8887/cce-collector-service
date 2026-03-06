@@ -22,8 +22,7 @@ import lombok.NoArgsConstructor;
  * id max 50 chars) is handled by {@code CloudEventValidator} (C5).</p>
  *
  * <p>Mutable class — {@code EventDefaultsEnricher} (C8) may set
- * {@code correlationid}, {@code time}, and {@code datacontenttype}
- * when absent.</p>
+ * {@code correlationid} and {@code time} when absent.</p>
  */
 @Data
 @NoArgsConstructor
@@ -54,7 +53,8 @@ public class EventIngestionRequest {
     /** ISO-8601 datetime string; filled by server if absent. */
     private String time;
 
-    /** MIME type of data payload; defaults to {@code application/fhir+json} if absent. */
+    /** MIME type of data payload. Must be {@code application/fhir+json} or {@code application/json}. */
+    @NotBlank(message = "datacontenttype is required")
     private String datacontenttype;
 
     // ─── CloudEvents data ──────────────────────────────────────────
