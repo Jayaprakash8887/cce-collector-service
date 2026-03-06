@@ -96,8 +96,9 @@ org.openphc.cce.collector/
 ├── service/                               # Core business logic
 │   ├── EventIngestionService.java         #   Main orchestrator: validate → persist → publish
 │   ├── CloudEventValidator.java           #   CloudEvents v1.0 envelope validation
-│   ├── FhirPayloadValidator.java          #   FHIR R4 structural validation via HAPI
+│   ├── PayloadValidator.java              #   Payload validation: branches on datacontenttype (FHIR / JSON / unsupported)
 │   ├── EventDefaultsEnricher.java         #   Generates correlationId if absent, fills time if absent
+│   ├── EventPublisher.java                #   Converts InboundEvent → CloudEventMessage, publishes to Kafka
 │   ├── DeduplicationService.java          #   DB dedup with configurable lookback window
 │   └── RejectionService.java              #   Updates inbound_event with rejection details
 ├── kafka/
@@ -116,12 +117,14 @@ org.openphc.cce.collector/
 │   └── exception/
 │       ├── GlobalExceptionHandler.java    #   @ControllerAdvice centralized error handling
 │       ├── CloudEventValidationException.java
-│       ├── FhirValidationException.java
+│       ├── PayloadValidationException.java
 │       ├── KafkaPublishException.java
-│       └── DuplicateEventException.java
+│       ├── DuplicateEventException.java
+│       └── PatientIdNotFoundException.java
 └── fhir/
     ├── FhirResourceParser.java            # HAPI FHIR parse + type detection
-    └── FhirResourceValidator.java         # Structural validation + subject cross-check
+    ├── FhirResourceValidator.java         # Structural validation + subject cross-check
+    └── PatientIdExtractor.java            # Extracts patient UPID from FHIR resource (subject/patient reference)
 ```
 
 ## 6. Core Processing Algorithm
@@ -147,7 +150,7 @@ org.openphc.cce.collector/
     a. If datacontenttype = application/fhir+json (or absent — default):
        i.   Parse data via HAPI FHIR
        ii.  Validate resourceType is present and parseable
-       iii. Cross-check subject reference (warning only)
+       iii. Cross-check subject reference against envelope `subject` (reject on mismatch)
        iv.  If invalid → status = 'REJECTED', rejection_reason = INVALID_FHIR, return 422
     b. If datacontenttype = application/json (non-FHIR):
        i.   Validate data is valid JSON
@@ -242,7 +245,7 @@ FHIR R4 structural validation via HAPI FHIR.
 | `data` parses as valid JSON | Required | Reject (`INVALID_FHIR`) |
 | `data.resourceType` present and non-empty | Required | Reject (`INVALID_FHIR`) |
 | HAPI FHIR can parse into `IBaseResource` | Required | Reject (`INVALID_FHIR`) |
-| `data.subject.reference` matches `subject` | Warning | Accept, log warning |
+| `data.subject.reference` matches `subject` | Required | Reject (`INVALID_FHIR`) |
 
 ### `application/json` (non-FHIR)
 

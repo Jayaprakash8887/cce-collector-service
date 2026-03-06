@@ -116,7 +116,7 @@ Ingest a single CloudEvents-formatted clinical event.
 ```json
 {
   "error": {
-    "code": "FHIR_VALIDATION_ERROR",
+    "code": "PAYLOAD_VALIDATION_ERROR",
     "message": "FHIR validation failed: Unable to parse FHIR resource"
   }
 }
@@ -235,12 +235,11 @@ Wraps an `EventIngestionResponse` payload in a standard `{"data": ...}` envelope
 | Code | HTTP Status | Description |
 |------|-------------|-------------|
 | `VALIDATION_ERROR` | 400 | CloudEvents envelope validation failed |
-| `FHIR_VALIDATION_ERROR` | 422 | FHIR payload failed structural validation |
+| `PAYLOAD_VALIDATION_ERROR` | 422 | FHIR payload failed structural validation |
 | `DUPLICATE_EVENT` | 200 | Event already received (idempotent) |
-| `KAFKA_PUBLISH_ERROR` | 500 | Failed to publish to Kafka — source system should retry |
+| `KAFKA_PUBLISH_FAILURE` | 500 | Failed to publish to Kafka — source system should retry |
 | `INTERNAL_ERROR` | 500 | Unexpected server error |
 | `NOT_FOUND` | 404 | Resource not found |
-| `CONSTRAINT_VIOLATION` | 400 | Request body validation error (Bean Validation) |
 
 ---
 
@@ -272,7 +271,7 @@ Multi-word field names follow the CloudEvents convention of concatenated lowerca
 | Valid JSON structure | Error → reject |
 | `resourceType` present | Error → reject |
 | HAPI FHIR parseable | Error → reject |
-| `subject.reference` matches `subject` field | Warning → accept with log |
+| `subject.reference` matches `subject` field | Error → reject |
 
 ---
 

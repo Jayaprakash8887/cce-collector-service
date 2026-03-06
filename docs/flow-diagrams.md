@@ -55,6 +55,7 @@ flowchart TD
 sequenceDiagram
     participant Client as External System<br/>(openHIM / EMR)
     participant Controller as EventIngestionController
+    participant Service as EventIngestionService
     participant Validator as CloudEventValidator
     participant Dedup as DeduplicationService
     participant Repo as InboundEventRepository
@@ -63,28 +64,30 @@ sequenceDiagram
     participant Kafka as Kafka Broker
 
     Client->>Controller: POST /v1/events (CloudEvents JSON)
-    Controller->>Validator: validate(request)
-    Validator-->>Controller: ✓ valid
+    Controller->>Service: ingest(request)
+    Service->>Validator: validate(request)
+    Validator-->>Service: ✓ valid
 
-    Controller->>Dedup: isDuplicate(source, id)
-    Dedup-->>Controller: false
+    Service->>Dedup: isDuplicate(source, id)
+    Dedup-->>Service: false
 
-    Controller->>Repo: save(inboundEvent, status=RECEIVED)
-    Repo-->>Controller: inboundEvent
+    Service->>Repo: save(inboundEvent, status=RECEIVED)
+    Repo-->>Service: inboundEvent
 
-    Controller->>Defaults: ensureCorrelationId(correlationid)
-    Defaults-->>Controller: corr-<uuid>
-    Controller->>Defaults: ensureEventTime(time)
-    Defaults-->>Controller: OffsetDateTime
+    Service->>Defaults: ensureCorrelationId(correlationid)
+    Defaults-->>Service: corr-<uuid>
+    Service->>Defaults: ensureEventTime(time)
+    Defaults-->>Service: OffsetDateTime
 
-    Controller->>FHIR: validate(request)
-    FHIR-->>Controller: ✓ valid FHIR R4
+    Service->>PV: validate(request)
+    PV-->>Service: ✓ valid FHIR R4
 
-    Controller->>Repo: save(inboundEvent, status=ACCEPTED)
+    Service->>Repo: save(inboundEvent, status=ACCEPTED)
 
-    Controller->>Kafka: send(topic, key=subject, value=CloudEvents JSON)
-    Kafka-->>Controller: RecordMetadata (topic, partition, offset)
+    Service->>Kafka: send(topic, key=subject, value=CloudEvents JSON)
+    Kafka-->>Service: RecordMetadata (topic, partition, offset)
 
+    Service-->>Controller: EventIngestionResponse
     Controller-->>Client: 202 Accepted {eventId, status: accepted, correlationId}
 ```
 
@@ -96,30 +99,32 @@ sequenceDiagram
 sequenceDiagram
     participant Client as External System
     participant Controller as EventIngestionController
+    participant Service as EventIngestionService
     participant Validator as CloudEventValidator
     participant Dedup as DeduplicationService
     participant Repo as InboundEventRepository
     participant Defaults as EventDefaultsEnricher
-    participant FHIR as FhirPayloadValidator
+    participant PV as PayloadValidator
     participant RS as RejectionService
 
     Client->>Controller: POST /v1/events (invalid FHIR data)
-    Controller->>Validator: validate(request)
-    Validator-->>Controller: ✓ envelope valid
+    Controller->>Service: ingest(request)
+    Service->>Validator: validate(request)
+    Validator-->>Service: ✓ envelope valid
 
-    Controller->>Dedup: isDuplicate(source, id)
-    Dedup-->>Controller: false
+    Service->>Dedup: isDuplicate(source, id)
+    Dedup-->>Service: false
 
-    Controller->>Repo: save(inboundEvent, status=RECEIVED)
-    Controller->>Defaults: apply server-side defaults
-    Defaults-->>Controller: enriched values
+    Service->>Repo: save(inboundEvent, status=RECEIVED)
+    Service->>Defaults: apply server-side defaults
+    Defaults-->>Service: enriched values
 
-    Controller->>FHIR: validate(request)
-    FHIR-->>Controller: ✗ FhirValidationException
+    Service->>PV: validate(request)
+    PV-->>Service: ✗ PayloadValidationException
 
-    Controller->>Repo: save(inboundEvent, status=REJECTED, reason=INVALID_FHIR)
-    Controller->>RS: recordRejection(inboundEvent, INVALID_FHIR, errorDetails)
+    Service->>RS: recordRejection(inboundEvent, INVALID_FHIR, errorDetails)
 
+    Service-->>Controller: throw PayloadValidationException
     Controller-->>Client: 422 Unprocessable Entity {error details}
 ```
 
@@ -131,17 +136,20 @@ sequenceDiagram
 sequenceDiagram
     participant Client as External System
     participant Controller as EventIngestionController
+    participant Service as EventIngestionService
     participant Validator as CloudEventValidator
     participant Dedup as DeduplicationService
 
     Client->>Controller: POST /v1/events (same id + source as before)
-    Controller->>Validator: validate(request)
-    Validator-->>Controller: ✓ valid
+    Controller->>Service: ingest(request)
+    Service->>Validator: validate(request)
+    Validator-->>Service: ✓ valid
 
-    Controller->>Dedup: isDuplicate(source, id)
+    Service->>Dedup: isDuplicate(source, id)
     Note over Dedup: Query inbound_event WHERE<br/>cloudevents_id = ? AND source = ?<br/>AND received_at > now() - lookback
-    Dedup-->>Controller: true (duplicate found)
+    Dedup-->>Service: true (DuplicateEventException)
 
+    Service-->>Controller: throw DuplicateEventException
     Controller-->>Client: 200 OK {eventId, status: duplicate}
     Note over Client: Idempotent — no side effects
 ```
