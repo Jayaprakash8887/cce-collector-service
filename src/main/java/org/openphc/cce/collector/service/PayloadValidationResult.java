@@ -9,8 +9,8 @@ import java.util.List;
 /**
  * Result of payload validation (FHIR or JSON).
  *
- * <p>Contains errors (validation failures that reject the event) and warnings
- * (informational messages that do not prevent acceptance).</p>
+ * <p>Contains errors (validation failures that reject the event) and the
+ * parsed FHIR resource (if applicable).</p>
  */
 @Getter
 @Builder
@@ -18,6 +18,5 @@ public class PayloadValidationResult {
 
     private final boolean valid;
     private final List<String> errors;
-    private final List<String> warnings;
     private final IBaseResource parsedResource;
 }

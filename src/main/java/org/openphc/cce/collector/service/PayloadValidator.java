@@ -33,7 +33,7 @@ public class PayloadValidator {
      * Validate the payload of an inbound event.
      *
      * @param request the inbound CloudEvents request
-     * @return validation result (may contain warnings)
+     * @return validation result containing parsed resource (for FHIR payloads)
      * @throws PayloadValidationException if validation fails
      */
     public PayloadValidationResult validatePayload(EventIngestionRequest request) {
@@ -69,7 +69,6 @@ public class PayloadValidator {
         return PayloadValidationResult.builder()
                 .valid(true)
                 .errors(List.of())
-                .warnings(List.of())
                 .parsedResource(null)
                 .build();
     }

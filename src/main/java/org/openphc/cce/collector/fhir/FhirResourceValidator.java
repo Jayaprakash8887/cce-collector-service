@@ -40,18 +40,17 @@ public class FhirResourceValidator {
      *
      * @param data    the FHIR resource as a Jackson {@link JsonNode}
      * @param subject the CloudEvents {@code subject} (patient UPID)
-     * @return validation result with errors, warnings, and the parsed resource
+     * @return validation result with errors and the parsed resource
      *         (if parsing succeeded)
      */
     public PayloadValidationResult validate(JsonNode data, String subject) {
         List<String> errors = new ArrayList<>();
-        List<String> warnings = new ArrayList<>();
 
         // Check: resourceType present and non-empty
         String resourceType = parser.detectResourceType(data);
         if (resourceType == null) {
             errors.add("data.resourceType is required for FHIR resources");
-            return buildResult(errors, warnings, null);
+            return buildResult(errors, null);
         }
 
         // Check: HAPI FHIR can parse the resource
@@ -60,13 +59,13 @@ public class FhirResourceValidator {
             parsedResource = parser.parse(data);
         } catch (IllegalArgumentException e) {
             errors.add("Failed to parse FHIR resource: " + e.getMessage());
-            return buildResult(errors, warnings, null);
+            return buildResult(errors, null);
         }
 
         // Check: subject reference — rejects on mismatch or extraction failure
         checkSubjectReference(parsedResource, subject, errors);
 
-        return buildResult(errors, warnings, parsedResource);
+        return buildResult(errors, parsedResource);
     }
 
     private void checkSubjectReference(IBaseResource parsedResource, String subject,
@@ -90,12 +89,10 @@ public class FhirResourceValidator {
         }
     }
 
-    private PayloadValidationResult buildResult(List<String> errors, List<String> warnings,
-                                             IBaseResource resource) {
+    private PayloadValidationResult buildResult(List<String> errors, IBaseResource resource) {
         return PayloadValidationResult.builder()
                 .valid(errors.isEmpty())
                 .errors(List.copyOf(errors))
-                .warnings(List.copyOf(warnings))
                 .parsedResource(resource)
                 .build();
     }

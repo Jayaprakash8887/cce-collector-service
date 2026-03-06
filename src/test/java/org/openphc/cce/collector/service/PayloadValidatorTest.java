@@ -88,7 +88,6 @@ class PayloadValidatorTest {
             PayloadValidationResult invalidResult = PayloadValidationResult.builder()
                     .valid(false)
                     .errors(List.of("data.resourceType is required for FHIR resources"))
-                    .warnings(List.of())
                     .parsedResource(null)
                     .build();
 
@@ -103,24 +102,6 @@ class PayloadValidatorTest {
                     "data.resourceType is required for FHIR resources");
         }
 
-        @Test
-        @DisplayName("FHIR warnings are propagated in result")
-        void warningsPropagated() {
-            EventIngestionRequest req = buildRequest("application/fhir+json");
-            PayloadValidationResult resultWithWarnings = PayloadValidationResult.builder()
-                    .valid(true)
-                    .errors(List.of())
-                    .warnings(List.of("data.subject.reference mismatch"))
-                    .parsedResource(null)
-                    .build();
-
-            when(fhirResourceValidator.validate(any(), any())).thenReturn(resultWithWarnings);
-
-            PayloadValidationResult result = payloadValidator.validatePayload(req);
-
-            assertThat(result.isValid()).isTrue();
-            assertThat(result.getWarnings()).containsExactly("data.subject.reference mismatch");
-        }
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -236,7 +217,6 @@ class PayloadValidatorTest {
         return PayloadValidationResult.builder()
                 .valid(true)
                 .errors(List.of())
-                .warnings(List.of())
                 .parsedResource(null)
                 .build();
     }
