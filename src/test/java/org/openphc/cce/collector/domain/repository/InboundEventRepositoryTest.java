@@ -46,6 +46,7 @@ class InboundEventRepositoryTest {
                 .source(source)
                 .type("org.openphc.cce.vitals.observation.v1")
                 .subject("urn:upid:patient-123")
+                .dataContentType("application/fhir+json")
                 .rawPayload("{\"resourceType\":\"Bundle\",\"entry\":[]}")
                 .status(status)
                 .build();
