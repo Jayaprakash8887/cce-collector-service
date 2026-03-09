@@ -132,7 +132,7 @@ public class EventIngestionService {
 
             // ── Step 8: Synchronous Kafka publish ──────────────────
             try {
-                eventPublisher.publish(inbound);
+                eventPublisher.publish(request);
             } catch (KafkaPublishException ex) {
                 rejectionService.recordRejection(inbound, RejectionReason.KAFKA_PUBLISH_FAILURE,
                         ex.getMessage());

@@ -100,10 +100,10 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(KafkaPublishException.class)
     public ResponseEntity<ApiError> handleKafkaPublish(KafkaPublishException ex) {
-        log.error("Kafka publish failed: {}", ex.getMessage(), ex);
+        log.error("Event publish failed: {}", ex.getMessage(), ex);
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiError.of("KAFKA_PUBLISH_FAILURE", ex.getMessage()));
+                .body(ApiError.of("EVENT_PUBLISH_FAILURE", "Event could not be published. Please retry."));
     }
 
     /**

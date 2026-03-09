@@ -98,7 +98,7 @@ org.openphc.cce.collector/
 │   ├── CloudEventValidator.java           #   CloudEvents v1.0 envelope validation
 │   ├── PayloadValidator.java              #   Payload validation: branches on datacontenttype (FHIR / JSON / unsupported)
 │   ├── EventDefaultsEnricher.java         #   Generates correlationId if absent, fills time if absent
-│   ├── EventPublisher.java                #   Converts InboundEvent → CloudEventMessage, publishes to Kafka
+│   ├── EventPublisher.java                #   Publishes enriched EventIngestionRequest to Kafka
 │   ├── DeduplicationService.java          #   DB dedup with configurable lookback window
 │   └── RejectionService.java              #   Updates inbound_event with rejection details
 ├── kafka/
@@ -110,9 +110,8 @@ org.openphc.cce.collector/
 │   ├── dto/                               # Request/response data transfer objects
 │   │   ├── ApiResponse.java               #   { "data": EventIngestionResponse } envelope
 │   │   ├── ApiError.java                  #   { "error": { "code", "message" } }
-│   │   ├── EventIngestionRequest.java     #   CloudEvents envelope (inbound DTO)
+│   │   ├── EventIngestionRequest.java     #   CloudEvents envelope (inbound DTO & Kafka message)
 │   │   ├── EventIngestionResponse.java    #   Accepted/rejected receipt
-│   │   ├── CloudEventMessage.java         #   Kafka message DTO (CloudEvents spec field names)
 │   │   └── RejectedEventDto.java          #   Rejected event response DTO
 │   └── exception/
 │       ├── GlobalExceptionHandler.java    #   @ControllerAdvice centralized error handling

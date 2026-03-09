@@ -220,20 +220,23 @@ class EventIngestionServiceTest {
             order.verify(enricher).enrich(eq(request), any(InboundEvent.class));
             order.verify(payloadValidator).validatePayload(request);
             order.verify(repository).save(any(InboundEvent.class));      // Step 7: persist ACCEPTED
-            order.verify(eventPublisher).publish(any(InboundEvent.class));
+            order.verify(eventPublisher).publish(any(EventIngestionRequest.class));
         }
 
         @Test
-        @DisplayName("Publishes event to Kafka after acceptance")
+        @DisplayName("Publishes the same (enriched) request object to Kafka")
         void publishesEventToKafka() {
             EventIngestionRequest request = buildValidFhirRequest();
             stubRepositorySave();
 
             service.ingest(request);
 
-            ArgumentCaptor<InboundEvent> captor = ArgumentCaptor.forClass(InboundEvent.class);
+            ArgumentCaptor<EventIngestionRequest> captor =
+                    ArgumentCaptor.forClass(EventIngestionRequest.class);
             verify(eventPublisher).publish(captor.capture());
-            assertThat(captor.getValue().getStatus()).isEqualTo(InboundStatus.ACCEPTED);
+            // Same object reference — enricher mutates the request before publish
+            assertThat(captor.getValue()).isSameAs(request);
+            assertThat(captor.getValue().getId()).isEqualTo(request.getId());
         }
 
         @Test
@@ -502,7 +505,7 @@ class EventIngestionServiceTest {
             EventIngestionRequest request = buildValidFhirRequest();
             stubRepositorySave();
             doThrow(new KafkaPublishException("cce.events.inbound", "Broker unavailable"))
-                    .when(eventPublisher).publish(any(InboundEvent.class));
+                    .when(eventPublisher).publish(any(EventIngestionRequest.class));
 
             assertThatThrownBy(() -> service.ingest(request))
                     .isInstanceOf(KafkaPublishException.class)
@@ -515,7 +518,7 @@ class EventIngestionServiceTest {
             EventIngestionRequest request = buildValidFhirRequest();
             stubRepositorySave();
             doThrow(new RuntimeException("Connection reset"))
-                    .when(eventPublisher).publish(any(InboundEvent.class));
+                    .when(eventPublisher).publish(any(EventIngestionRequest.class));
 
             assertThatThrownBy(() -> service.ingest(request))
                     .isInstanceOf(KafkaPublishException.class)
@@ -528,7 +531,7 @@ class EventIngestionServiceTest {
             EventIngestionRequest request = buildValidFhirRequest();
             stubRepositorySave();
             doThrow(new KafkaPublishException("cce.events.inbound", "Timeout"))
-                    .when(eventPublisher).publish(any(InboundEvent.class));
+                    .when(eventPublisher).publish(any(EventIngestionRequest.class));
 
             assertThatThrownBy(() -> service.ingest(request))
                     .isInstanceOf(KafkaPublishException.class);
@@ -556,7 +559,7 @@ class EventIngestionServiceTest {
             });
 
             doThrow(new KafkaPublishException("cce.events.inbound", "Timeout"))
-                    .when(eventPublisher).publish(any(InboundEvent.class));
+                    .when(eventPublisher).publish(any(EventIngestionRequest.class));
 
             assertThatThrownBy(() -> service.ingest(request))
                     .isInstanceOf(KafkaPublishException.class);
