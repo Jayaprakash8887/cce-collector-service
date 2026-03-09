@@ -67,21 +67,6 @@ class PayloadValidatorTest {
         }
 
         @Test
-        @DisplayName("absent datacontenttype defaults to FHIR validation")
-        void absentContentTypeDefaultsToFhir() {
-            EventIngestionRequest req = buildRequest(null);
-            PayloadValidationResult validResult = validFhirResult();
-
-            when(fhirResourceValidator.validate(eq(req.getData()), eq(req.getSubject())))
-                    .thenReturn(validResult);
-
-            PayloadValidationResult result = payloadValidator.validatePayload(req);
-
-            assertThat(result.isValid()).isTrue();
-            verify(fhirResourceValidator).validate(any(), any());
-        }
-
-        @Test
         @DisplayName("invalid FHIR resource throws with INVALID_FHIR")
         void invalidFhirThrows() {
             EventIngestionRequest req = buildRequest("application/fhir+json");

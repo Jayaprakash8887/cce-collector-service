@@ -21,7 +21,7 @@ Every HTTP request is persisted **as-is** before processing. Used for audit trai
 | `spec_version` | `VARCHAR(10)` | No | `'1.0'` | CloudEvents spec version |
 | `subject` | `VARCHAR(100)` | Yes | — | Patient UPID (e.g., `260225-0002-5501`) |
 | `event_time` | `TIMESTAMPTZ` | Yes | — | Source-provided event time |
-| `data_content_type` | `VARCHAR(50)` | Yes | `'application/fhir+json'` | MIME type of `data` payload |
+| `data_content_type` | `VARCHAR(50)` | No | — | MIME type of `data` payload |
 | `facility_id` | `VARCHAR(100)` | Yes | — | Healthcare facility FOSA ID |
 | `correlation_id` | `VARCHAR(100)` | Yes | — | Distributed tracing ID |
 | `source_event_id` | `VARCHAR(100)` | Yes | — | Source system's internal event ID |
@@ -94,13 +94,13 @@ Inbound requests use **lowercase** field names per the CloudEvents v1.0 specific
 | `type` | `string` | Non-empty (mandatory CloudEvents attribute, no format restriction) | `"org.openphc.cce.encounter"` |
 | `subject` | `string` | Non-empty patient UPID | `"260225-0002-5501"` |
 | `data` | `object` | Valid JSON; FHIR validation applied only when `datacontenttype` = `application/fhir+json` | `{ "resourceType": "Encounter", ... }` |
+| `datacontenttype` | `string` | Non-empty; must be `application/fhir+json` or `application/json` | `"application/fhir+json"` |
 
 ### 3.2 Recommended Fields
 
 | Field | Type | Default if Absent | Example |
 |-------|------|-------------------|---------|
 | `time` | `string` | Server `received_at` | `"2026-02-25T08:00:00Z"` |
-| `datacontenttype` | `string` | `"application/fhir+json"` | `"application/fhir+json"` or `"application/json"` |
 | `facilityid` | `string` | — | `"0002"` |
 | `correlationid` | `string` | Generated `corr-<uuid>` | `"corr-1343872c-636d-506f-b041-1e571d426932"` |
 

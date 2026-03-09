@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
 /**
  * Unit tests for {@link CloudEventValidator}.
  *
- * <p>Covers all 6 validation rules, edge cases, and the aggregation
+ * <p>Covers all 7 validation rules, edge cases, and the aggregation
  * behaviour (all errors collected, not just the first). No Spring
  * context needed — pure unit tests.</p>
  */
@@ -44,6 +44,7 @@ class CloudEventValidatorTest {
                 .source("rhie-mediator")
                 .type("org.openphc.cce.encounter")
                 .subject("260115-0001-7823")
+                .datacontenttype("application/fhir+json")
                 .data(mapper.valueToTree(Map.of("resourceType", "Encounter")))
                 .build();
     }
@@ -358,6 +359,43 @@ class CloudEventValidatorTest {
     }
 
     // ════════════════════════════════════════════════════════════════
+    // datacontenttype Validation
+    // ════════════════════════════════════════════════════════════════
+
+    @Nested
+    @DisplayName("datacontenttype validation")
+    class DatacontenttypeValidation {
+
+        @Test
+        @DisplayName("null datacontenttype → error")
+        void nullDatacontenttype() {
+            EventIngestionRequest req = validRequest();
+            req.setDatacontenttype(null);
+
+            CloudEventValidationException ex =
+                    catchThrowableOfType(CloudEventValidationException.class,
+                            () -> validator.validate(req));
+
+            assertThat(ex.getValidationErrors())
+                    .anyMatch(e -> e.contains("datacontenttype") && e.contains("required"));
+        }
+
+        @Test
+        @DisplayName("blank datacontenttype → error")
+        void blankDatacontenttype() {
+            EventIngestionRequest req = validRequest();
+            req.setDatacontenttype("   ");
+
+            CloudEventValidationException ex =
+                    catchThrowableOfType(CloudEventValidationException.class,
+                            () -> validator.validate(req));
+
+            assertThat(ex.getValidationErrors())
+                    .anyMatch(e -> e.contains("datacontenttype") && e.contains("required"));
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════
     // Multiple Errors Aggregation
     // ════════════════════════════════════════════════════════════════
 
@@ -366,7 +404,7 @@ class CloudEventValidatorTest {
     class ErrorAggregation {
 
         @Test
-        @DisplayName("all fields missing → all 6 errors reported")
+        @DisplayName("all fields missing → all 7 errors reported")
         void allMissing() {
             EventIngestionRequest req = EventIngestionRequest.builder().build();
 
@@ -375,13 +413,14 @@ class CloudEventValidatorTest {
                             () -> validator.validate(req));
 
             List<String> errors = ex.getValidationErrors();
-            assertThat(errors).hasSize(6);
+            assertThat(errors).hasSize(7);
             assertThat(errors).anyMatch(e -> e.contains("specversion"));
             assertThat(errors).anyMatch(e -> e.contains("id"));
             assertThat(errors).anyMatch(e -> e.contains("source"));
             assertThat(errors).anyMatch(e -> e.contains("type"));
             assertThat(errors).anyMatch(e -> e.contains("subject"));
             assertThat(errors).anyMatch(e -> e.contains("data"));
+            assertThat(errors).anyMatch(e -> e.contains("datacontenttype"));
         }
 
         @Test

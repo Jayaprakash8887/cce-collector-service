@@ -10,7 +10,7 @@ import java.util.List;
 /**
  * Validates CloudEvents v1.0 envelope attributes per the CCE specification.
  *
- * <p>All six validation rules are evaluated on every call — the validator
+ * <p>All seven validation rules are evaluated on every call — the validator
  * collects <em>all</em> violations before throwing, so callers receive a
  * complete error list in a single pass.</p>
  *
@@ -22,6 +22,7 @@ import java.util.List;
  *   <li>{@code type} — required, non-blank (presence-only; no format restriction)</li>
  *   <li>{@code subject} — required, non-blank (CCE patient UPID)</li>
  *   <li>{@code data} — required, non-null</li>
+ *   <li>{@code datacontenttype} — required, non-blank</li>
  * </ol>
  *
  * <p>The {@code type} field is validated <strong>only for presence</strong>.
@@ -78,6 +79,11 @@ public class CloudEventValidator {
         // Rule f: data — required, non-null
         if (request.getData() == null) {
             errors.add("data is required");
+        }
+
+        // Rule g: datacontenttype — required, non-blank
+        if (isBlank(request.getDatacontenttype())) {
+            errors.add("datacontenttype is required");
         }
 
         if (!errors.isEmpty()) {
