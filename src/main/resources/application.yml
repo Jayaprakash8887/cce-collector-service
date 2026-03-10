@@ -88,7 +88,7 @@ cce:
   kafka:
     topics:
       inbound: ${CCE_COLLECTOR_KAFKA_TOPICS_INBOUND:cce.events.inbound}
-      dead-letter: ${CCE_COLLECTOR_KAFKA_TOPICS_DEAD_LETTER:cce.deadletter}
+    publish-timeout-seconds: ${CCE_COLLECTOR_KAFKA_PUBLISH_TIMEOUT_SECONDS:30}
 
 # ---------- Logging ----------
 logging:
