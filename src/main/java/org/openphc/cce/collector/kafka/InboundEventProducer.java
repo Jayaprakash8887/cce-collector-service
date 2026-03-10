@@ -1,6 +1,7 @@
 package org.openphc.cce.collector.kafka;
 
-import lombok.RequiredArgsConstructor;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.openphc.cce.collector.api.dto.EventIngestionRequest;
 import org.openphc.cce.collector.api.exception.KafkaPublishException;
@@ -30,11 +31,25 @@ import java.util.concurrent.TimeUnit;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class InboundEventProducer {
 
     private final KafkaTemplate<String, EventIngestionRequest> kafkaTemplate;
     private final KafkaTopicProperties kafkaTopicProperties;
+    private final Counter publishSuccessCounter;
+    private final Counter publishFailureCounter;
+
+    public InboundEventProducer(KafkaTemplate<String, EventIngestionRequest> kafkaTemplate,
+                                KafkaTopicProperties kafkaTopicProperties,
+                                MeterRegistry meterRegistry) {
+        this.kafkaTemplate = kafkaTemplate;
+        this.kafkaTopicProperties = kafkaTopicProperties;
+        this.publishSuccessCounter = Counter.builder("cce.collector.kafka.publish.success")
+                .description("Successful Kafka publishes")
+                .register(meterRegistry);
+        this.publishFailureCounter = Counter.builder("cce.collector.kafka.publish.failure")
+                .description("Failed Kafka publishes")
+                .register(meterRegistry);
+    }
 
     /**
      * Publish an enriched event to the inbound Kafka topic.
@@ -67,10 +82,12 @@ public class InboundEventProducer {
                     result.getRecordMetadata().offset(),
                     key,
                     request.getId());
+            publishSuccessCounter.increment();
 
         } catch (Exception ex) {
             log.error("Failed to publish event to Kafka: topic={}, key={}, cloudeventsId={}, error={}",
                     topic, key, request.getId(), ex.getMessage(), ex);
+            publishFailureCounter.increment();
             throw new KafkaPublishException(topic, ex);
         }
     }

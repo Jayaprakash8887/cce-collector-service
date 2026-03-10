@@ -1,7 +1,8 @@
 package org.openphc.cce.collector.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import lombok.RequiredArgsConstructor;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import org.openphc.cce.collector.api.dto.EventIngestionRequest;
 import org.openphc.cce.collector.api.exception.PayloadValidationException;
 import org.openphc.cce.collector.domain.model.enums.RejectionReason;
@@ -21,13 +22,21 @@ import java.util.List;
  * </ul>
  */
 @Service
-@RequiredArgsConstructor
 public class PayloadValidator {
 
     private static final String FHIR_JSON = "application/fhir+json";
     private static final String PLAIN_JSON = "application/json";
 
     private final FhirResourceValidator fhirResourceValidator;
+    private final Timer fhirValidationTimer;
+
+    public PayloadValidator(FhirResourceValidator fhirResourceValidator,
+                            MeterRegistry meterRegistry) {
+        this.fhirResourceValidator = fhirResourceValidator;
+        this.fhirValidationTimer = Timer.builder("cce.collector.fhir.validation.duration")
+                .description("FHIR payload validation duration")
+                .register(meterRegistry);
+    }
 
     /**
      * Validate the payload of an inbound event.
@@ -51,8 +60,10 @@ public class PayloadValidator {
     }
 
     private PayloadValidationResult validateFhir(EventIngestionRequest request) {
+        Timer.Sample sample = Timer.start();
         PayloadValidationResult result = fhirResourceValidator.validate(
                 request.getData(), request.getSubject());
+        sample.stop(fhirValidationTimer);
 
         if (!result.isValid()) {
             throw new PayloadValidationException(result.getErrors(), RejectionReason.INVALID_FHIR);

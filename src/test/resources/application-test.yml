@@ -38,6 +38,11 @@ spring:
     exclude:
       - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
 
+management:
+  health:
+    kafka:
+      enabled: false
+
 logging:
   level:
     org.openphc.cce.collector: DEBUG

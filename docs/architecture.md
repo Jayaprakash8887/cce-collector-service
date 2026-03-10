@@ -84,7 +84,10 @@ org.openphc.cce.collector/
 │   ├── FhirConfig.java                    #   FhirContext.forR4() singleton bean
 │   ├── JpaConfig.java                     #   Enables JPA repositories & transactions
 │   ├── SecurityConfig.java                #   Stateless security, CSRF disabled
-│   └── WebConfig.java                     #   CORS configuration
+│   ├── WebConfig.java                     #   CORS configuration
+│   ├── ObservabilityConfig.java           #   Micrometer common tags, rejected-count gauge
+│   ├── KafkaHealthIndicator.java          #   Custom health indicator for Kafka broker connectivity
+│   └── RequestLoggingFilter.java          #   OncePerRequestFilter: sets MDC requestId per request
 ├── domain/
 │   ├── model/                             # JPA entities
 │   │   ├── InboundEvent.java              #   Raw inbound request record (audit/dedup/rejection tracking)
@@ -122,6 +125,14 @@ org.openphc.cce.collector/
     ├── FhirResourceParser.java            # HAPI FHIR parse + type detection
     ├── FhirResourceValidator.java         # Structural validation + subject cross-check
     └── PatientIdExtractor.java            # Extracts patient UPID from FHIR resource (subject/patient reference)
+
+src/main/resources/
+├── application.yml                        # Common config (datasource, kafka, actuator, metrics)
+├── application-local.yml                  # Local dev overrides (debug logging, relaxed pool sizes)
+├── application-staging.yml                # Staging overrides
+├── application-production.yml             # Production overrides
+├── logback-spring.xml                     # Structured logging: JSON (production), console (others), MDC fields
+└── db/migration/                          # Flyway migration scripts
 ```
 
 ## 6. Core Processing Algorithm
