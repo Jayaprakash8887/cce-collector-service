@@ -17,7 +17,7 @@ It receives clinical events from external EHR/RHIE systems (via openHIM mediator
 | 5 | **Apply server-side defaults** | Generate `correlationid` (UUID with `corr-` prefix) if absent; fill `time` with server `received_at` if absent |
 | 6 | **Deduplicate inbound events** | Reject/mark duplicates using `(id, source)` compound key via PostgreSQL with configurable lookback window |
 | 7 | **Publish to Kafka** | Topic `cce.events.inbound` with `subject` (patient_id) as partition key |
-| 8 | **Record rejection details** | Persist rejection reason, error details, and resolution tracking on `inbound_event` for rejected events |
+| 8 | **Record rejection details** | Persist rejection reason and error details on `inbound_event` for rejected events |
 | 9 | **Health/readiness endpoints** | For Kubernetes orchestration |
 
 ### Explicit Exclusions
@@ -105,14 +105,12 @@ org.openphc.cce.collector/
 │   └── InboundEventProducer.java          # Kafka publish to cce.events.inbound
 ├── api/
 │   ├── controller/
-│   │   ├── EventIngestionController.java  #   POST /v1/events
-│   │   └── RejectedEventController.java   #   Rejected event queries and resolution
+│   │   └── EventIngestionController.java  #   POST /v1/events
 │   ├── dto/                               # Request/response data transfer objects
 │   │   ├── ApiResponse.java               #   { "data": EventIngestionResponse } envelope
 │   │   ├── ApiError.java                  #   { "error": { "code", "message" } }
 │   │   ├── EventIngestionRequest.java     #   CloudEvents envelope (inbound DTO & Kafka message)
-│   │   ├── EventIngestionResponse.java    #   Accepted/rejected receipt
-│   │   └── RejectedEventDto.java          #   Rejected event response DTO
+│   │   └── EventIngestionResponse.java    #   Accepted/rejected receipt
 │   └── exception/
 │       ├── GlobalExceptionHandler.java    #   @ControllerAdvice centralized error handling
 │       ├── CloudEventValidationException.java

@@ -134,21 +134,11 @@ Recommended panels for a Collector Service dashboard:
 
 ---
 
-## 3. Rejected Event Management
+## 3. Rejected Event Investigation
 
 ### Overview
 
-Rejected events are events that failed validation or processing. They are tracked in the `inbound_event` table with `status = 'REJECTED'`, along with `rejection_reason` and `error_details` columns. Optionally, a summary is also published to the `cce.deadletter` Kafka topic for external monitoring.
-
-### Querying Rejected Events
-
-```bash
-# List recent rejected events (paginated)
-curl "http://localhost:8080/v1/events/rejected?page=0&size=20" | jq .
-
-# Get a specific rejected event
-curl "http://localhost:8080/v1/events/rejected/{id}" | jq .
-```
+Rejected events are events that failed validation or processing. They are tracked in the `inbound_event` table with `status = 'REJECTED'`, along with `rejection_reason` and `error_details` columns. The Collector Service does not expose REST endpoints for querying rejected events — investigation is done via direct database queries.
 
 ### Direct Database Query
 
@@ -174,13 +164,6 @@ WHERE status = 'REJECTED'
   AND received_at > NOW() - INTERVAL '24 hours'
 GROUP BY source 
 ORDER BY count DESC;
-```
-
-### Retry Rejected Events
-
-```bash
-# Retry a specific rejected event
-curl -X POST "http://localhost:8080/v1/events/rejected/{id}/retry"
 ```
 
 ### Batch Cleanup (SQL)
@@ -383,12 +366,13 @@ The following MDC fields are set per-request for correlation:
 2. Events are persisted in `inbound_event` with `status = 'REJECTED'` and `rejection_reason = 'KAFKA_PUBLISH_FAILURE'`
 3. Source systems (openHIM mediators) will retry based on their own retry policy
 4. When Kafka recovers, new requests will succeed immediately
-5. Previously rejected events can be retried via the rejected event management API:
-   ```bash
-   # List events rejected due to Kafka failure
-   curl "http://localhost:8080/v1/events/rejected?rejectionReason=KAFKA_PUBLISH_FAILURE" | jq .
-   # Retry a specific event
-   curl -X POST "http://localhost:8080/v1/events/rejected/{id}/retry"
+5. Previously rejected events require the source system to re-submit:
+   ```sql
+   -- List events rejected due to Kafka failure
+   SELECT id, cloudevents_id, source, received_at
+   FROM inbound_event
+   WHERE status = 'REJECTED' AND rejection_reason = 'KAFKA_PUBLISH_FAILURE'
+   ORDER BY received_at DESC;
    ```
 
 ### Database Total Outage

@@ -124,75 +124,7 @@ Ingest a single CloudEvents-formatted clinical event.
 
 ---
 
-## 2. Rejected Event Management
-
-### GET /v1/events/rejected
-
-List rejected events with pagination. Queries `inbound_event` where `status = 'REJECTED'`.
-
-#### Query Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `page` | `int` | `0` | Page number (zero-based) |
-| `size` | `int` | `20` | Page size |
-| `rejectionReason` | `string` | — | Filter by rejection reason (e.g., `INVALID_FHIR`) |
-
-#### Response
-
-```json
-{
-  "data": {
-    "content": [
-      {
-        "id": "uuid-inbound-001",
-        "cloudEventsId": "evt-bad-001",
-        "source": "ebuzima/kigali-south",
-        "eventType": "cce.encounter.created",
-        "rejectionReason": "INVALID_FHIR",
-        "errorDetails": "Unable to parse FHIR resource",
-        "receivedAt": "2025-01-15T09:30:05Z"
-      }
-    ],
-    "totalElements": 1,
-    "totalPages": 1,
-    "number": 0,
-    "size": 20
-  }
-}
-```
-
-### GET /v1/events/rejected/{id}
-
-Retrieve a single rejected event by `inbound_event` ID.
-
-#### Response
-
-Same structure as individual item in the list response.
-
-### POST /v1/events/rejected/{id}/retry
-
-Retry processing a rejected event. Re-runs the validation pipeline on the original `raw_payload`.
-
-#### Response
-
-**200 OK**
-
-```json
-{
-  "data": {
-    "id": "uuid-inbound-001",
-    "status": "ACCEPTED",
-    "message": "Event reprocessed successfully"
-  }
-}
-```
-
-**422 Unprocessable Entity** — if revalidation still fails, returns updated error details.
-
----
-
-## 3. Health & Actuator Endpoints
+## 2. Health & Actuator Endpoints
 
 Standard Spring Boot Actuator endpoints:
 
@@ -207,7 +139,7 @@ Standard Spring Boot Actuator endpoints:
 
 ---
 
-## 4. Response Envelopes
+## 3. Response Envelopes
 
 ### Success Envelope (`ApiResponse`)
 
@@ -243,7 +175,7 @@ Wraps an `EventIngestionResponse` payload in a standard `{"data": ...}` envelope
 
 ---
 
-## 5. CloudEvents Field Name Conventions
+## 4. CloudEvents Field Name Conventions
 
 The Collector preserves **CloudEvents spec field names (lowercase)** end-to-end — from HTTP inbound through to the Kafka message. No field name translation is performed.
 
@@ -251,7 +183,7 @@ Multi-word field names follow the CloudEvents convention of concatenated lowerca
 
 ---
 
-## 6. Validation Rules Summary
+## 5. Validation Rules Summary
 
 ### CloudEvents Envelope
 
@@ -275,7 +207,7 @@ Multi-word field names follow the CloudEvents convention of concatenated lowerca
 
 ---
 
-## 7. Rate Limits & Constraints
+## 6. Rate Limits & Constraints
 
 | Constraint | Value |
 |-----------|-------|
