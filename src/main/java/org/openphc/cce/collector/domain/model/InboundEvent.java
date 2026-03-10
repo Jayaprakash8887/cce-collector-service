@@ -8,11 +8,15 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import org.openphc.cce.collector.domain.model.enums.InboundStatus;
 
 import java.time.OffsetDateTime;
@@ -71,6 +75,7 @@ public class InboundEvent {
     private String sourceEventId;
 
     @Column(name = "raw_payload", nullable = false, columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String rawPayload;
 
     @Enumerated(EnumType.STRING)
