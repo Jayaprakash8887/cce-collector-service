@@ -16,8 +16,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Unit tests for {@link EventDefaultsEnricher}.
  *
- * <p>Verifies the two enrichment rules and confirms that the request
- * DTO is never mutated. Only the entity receives enriched values.
+ * <p>Verifies the two enrichment rules and confirms that both the entity
+ * and the request DTO receive enriched values (so the request can be
+ * published to Kafka with defaults applied).
  * No Spring context needed — pure unit tests.</p>
  */
 class EventDefaultsEnricherTest {
@@ -84,7 +85,7 @@ class EventDefaultsEnricherTest {
     class CorrelationIdEnrichment {
 
         @Test
-        @DisplayName("generates correlationId on entity when absent in request")
+        @DisplayName("generates correlationId on both entity and request when absent")
         void generatesWhenAbsent() {
             EventIngestionRequest request = requestWithoutOptionals();
             InboundEvent entity = baseEntity();
@@ -95,8 +96,9 @@ class EventDefaultsEnricherTest {
                     .isNotNull()
                     .startsWith("corr-")
                     .hasSize(5 + 36); // "corr-" + UUID (36 chars)
-            // Request is NOT mutated
-            assertThat(request.getCorrelationid()).isNull();
+            // Request is also enriched (for Kafka publishing)
+            assertThat(request.getCorrelationid())
+                    .isEqualTo(entity.getCorrelationId());
         }
 
         @Test
@@ -137,7 +139,7 @@ class EventDefaultsEnricherTest {
     class TimeEnrichment {
 
         @Test
-        @DisplayName("fills eventTime from server receivedAt when absent")
+        @DisplayName("fills eventTime on both entity and request when absent")
         void fillsWhenAbsent() {
             EventIngestionRequest request = requestWithoutOptionals();
             InboundEvent entity = baseEntity();
@@ -146,8 +148,8 @@ class EventDefaultsEnricherTest {
             enricher.enrich(request, entity);
 
             assertThat(entity.getEventTime()).isEqualTo(receivedAt);
-            // Request is NOT mutated
-            assertThat(request.getTime()).isNull();
+            // Request is also enriched (for Kafka publishing)
+            assertThat(request.getTime()).isEqualTo(receivedAt.toString());
         }
 
         @Test
@@ -207,8 +209,8 @@ class EventDefaultsEnricherTest {
     class EntitySync {
 
         @Test
-        @DisplayName("all enriched values set on entity only")
-        void allValuesSyncedToEntity() {
+        @DisplayName("all enriched values set on both entity and request")
+        void allValuesSyncedToEntityAndRequest() {
             EventIngestionRequest request = requestWithoutOptionals();
             InboundEvent entity = baseEntity();
 
@@ -217,9 +219,9 @@ class EventDefaultsEnricherTest {
             assertThat(entity.getCorrelationId()).isNotNull().startsWith("corr-");
             assertThat(entity.getEventTime()).isNotNull();
 
-            // Request remains untouched for enriched fields
-            assertThat(request.getCorrelationid()).isNull();
-            assertThat(request.getTime()).isNull();
+            // Request also receives enriched values (for Kafka publishing)
+            assertThat(request.getCorrelationid()).isEqualTo(entity.getCorrelationId());
+            assertThat(request.getTime()).isEqualTo(entity.getEventTime().toString());
         }
 
         @Test

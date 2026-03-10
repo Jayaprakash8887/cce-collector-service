@@ -251,30 +251,30 @@ class DtoSerializationTest {
     }
 
     // ════════════════════════════════════════════════════════════════
-    // CloudEventMessage — Serialization
+    // EventIngestionRequest — Serialization (Kafka message format)
     // ════════════════════════════════════════════════════════════════
 
     @Nested
-    @DisplayName("CloudEventMessage — Serialization")
-    class CloudEventMessageSerialization {
+    @DisplayName("EventIngestionRequest — Serialization (Kafka)")
+    class EventIngestionRequestSerialization {
 
         @Test
         @DisplayName("serializes with all-lowercase field names")
         void lowercaseKeys() throws Exception {
-            CloudEventMessage msg = CloudEventMessage.builder()
+            EventIngestionRequest req = EventIngestionRequest.builder()
                     .id("evt-001")
                     .source("rhie-mediator")
                     .type("org.openphc.cce.encounter")
                     .specversion("1.0")
                     .subject("260115-0001-7823")
-                    .time(OffsetDateTime.of(2026, 1, 15, 8, 30, 0, 0, ZoneOffset.UTC))
+                    .time("2026-01-15T08:30:00Z")
                     .datacontenttype("application/fhir+json")
                     .correlationid("corr-abc")
                     .facilityid("0001")
                     .data(mapper.valueToTree(Map.of("resourceType", "Encounter")))
                     .build();
 
-            JsonNode node = mapper.valueToTree(msg);
+            JsonNode node = mapper.valueToTree(req);
 
             // All lowercase — no camelCase
             assertThat(node.has("specversion")).isTrue();
@@ -293,7 +293,7 @@ class DtoSerializationTest {
         @Test
         @DisplayName("null fields omitted via @JsonInclude(NON_NULL)")
         void nullOmitted() throws Exception {
-            CloudEventMessage msg = CloudEventMessage.builder()
+            EventIngestionRequest req = EventIngestionRequest.builder()
                     .id("evt-001")
                     .source("test")
                     .type("test.type")
@@ -301,7 +301,7 @@ class DtoSerializationTest {
                     .subject("patient-1")
                     .build();
 
-            JsonNode node = mapper.valueToTree(msg);
+            JsonNode node = mapper.valueToTree(req);
 
             assertThat(node.has("id")).isTrue();
             assertThat(node.has("time")).isFalse();
@@ -316,19 +316,18 @@ class DtoSerializationTest {
         }
 
         @Test
-        @DisplayName("time serializes as ISO-8601 string (not timestamp)")
+        @DisplayName("time serializes as ISO-8601 string")
         void timeSerialization() throws Exception {
-            OffsetDateTime time = OffsetDateTime.of(2026, 3, 1, 10, 0, 0, 0, ZoneOffset.UTC);
-            CloudEventMessage msg = CloudEventMessage.builder()
+            EventIngestionRequest req = EventIngestionRequest.builder()
                     .id("evt-001")
                     .source("test")
                     .type("test.type")
                     .specversion("1.0")
                     .subject("patient-1")
-                    .time(time)
+                    .time("2026-03-01T10:00:00Z")
                     .build();
 
-            JsonNode node = mapper.valueToTree(msg);
+            JsonNode node = mapper.valueToTree(req);
             String timeValue = node.get("time").asText();
 
             // Must be ISO-8601 string, not a numeric timestamp

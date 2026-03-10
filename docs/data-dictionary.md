@@ -77,6 +77,7 @@ Reason an event was rejected (stored on `inbound_event.rejection_reason`).
 | `PAYLOAD_TOO_LARGE` | Request body exceeds `max-payload-size` (default 1 MB) |
 | `DESERIALIZATION_ERROR` | Request body could not be parsed as JSON |
 | `KAFKA_PUBLISH_FAILURE` | Kafka broker unavailable or publish timed out — HTTP 500 returned to caller |
+| `INTERNAL_ERROR` | Unexpected failure during post-persist processing (safety net for orphaned RECEIVED records) |
 
 ---
 
