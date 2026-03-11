@@ -2,6 +2,7 @@ package org.openphc.cce.collector.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -58,6 +59,7 @@ class EventIngestionServiceTest {
     @Mock private EventPublisher eventPublisher;
     @Mock private RejectionService rejectionService;
 
+    private SimpleMeterRegistry meterRegistry;
     private EventIngestionService service;
 
     private static final long MAX_PAYLOAD_SIZE = 1_048_576L; // 1 MB
@@ -72,6 +74,7 @@ class EventIngestionServiceTest {
 
     @BeforeEach
     void setUp() {
+        meterRegistry = new SimpleMeterRegistry();
         service = new EventIngestionService(
                 cloudEventValidator,
                 deduplicationService,
@@ -80,6 +83,7 @@ class EventIngestionServiceTest {
                 payloadValidator,
                 eventPublisher,
                 rejectionService,
+                meterRegistry,
                 MAX_PAYLOAD_SIZE
         );
 

@@ -1,5 +1,8 @@
 package org.openphc.cce.collector.service;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.openphc.cce.collector.api.dto.EventIngestionRequest;
 import org.openphc.cce.collector.api.dto.EventIngestionResponse;
@@ -11,6 +14,7 @@ import org.openphc.cce.collector.domain.model.InboundEvent;
 import org.openphc.cce.collector.domain.model.enums.InboundStatus;
 import org.openphc.cce.collector.domain.model.enums.RejectionReason;
 import org.openphc.cce.collector.domain.repository.InboundEventRepository;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -54,6 +58,13 @@ public class EventIngestionService {
     private final RejectionService rejectionService;
     private final long maxPayloadSize;
 
+    // ── Metrics ────────────────────────────────────────────────
+    private final Counter receivedCounter;
+    private final Counter acceptedCounter;
+    private final Counter duplicateCounter;
+    private final MeterRegistry meterRegistry;
+    private final Timer ingestionTimer;
+
     public EventIngestionService(
             CloudEventValidator cloudEventValidator,
             DeduplicationService deduplicationService,
@@ -62,6 +73,7 @@ public class EventIngestionService {
             PayloadValidator payloadValidator,
             EventPublisher eventPublisher,
             RejectionService rejectionService,
+            MeterRegistry meterRegistry,
             @Value("${cce.collector.max-payload-size:1048576}") long maxPayloadSize) {
         this.cloudEventValidator = cloudEventValidator;
         this.deduplicationService = deduplicationService;
@@ -70,7 +82,21 @@ public class EventIngestionService {
         this.payloadValidator = payloadValidator;
         this.eventPublisher = eventPublisher;
         this.rejectionService = rejectionService;
+        this.meterRegistry = meterRegistry;
         this.maxPayloadSize = maxPayloadSize;
+
+        this.receivedCounter = Counter.builder("cce.collector.events.received")
+                .description("Total events received at POST /v1/events")
+                .register(meterRegistry);
+        this.acceptedCounter = Counter.builder("cce.collector.events.accepted")
+                .description("Events that passed all validation and were published")
+                .register(meterRegistry);
+        this.duplicateCounter = Counter.builder("cce.collector.events.duplicate")
+                .description("Duplicate events detected")
+                .register(meterRegistry);
+        this.ingestionTimer = Timer.builder("cce.collector.ingestion.duration")
+                .description("Full ingestion pipeline duration")
+                .register(meterRegistry);
     }
 
     /**
@@ -84,6 +110,14 @@ public class EventIngestionService {
      * @throws KafkaPublishException         if Kafka publish fails (→ 500)
      */
     public EventIngestionResponse ingest(EventIngestionRequest request) {
+        Timer.Sample timerSample = Timer.start(meterRegistry);
+        receivedCounter.increment();
+
+        // Populate MDC for structured logging
+        MDC.put("cloudEventsId", request.getId());
+        MDC.put("source", request.getSource());
+        MDC.put("subject", request.getSubject());
+
         log.info("Starting event ingestion: cloudeventsId={}, source={}",
                 request.getId(), request.getSource());
 
@@ -95,6 +129,7 @@ public class EventIngestionService {
 
         // ── Step 3: Deduplication check ────────────────────────────
         if (deduplicationService.isDuplicate(request.getId(), request.getSource())) {
+            duplicateCounter.increment();
             InboundEvent existing = repository
                     .findByCloudeventsIdAndSource(request.getId(), request.getSource())
                     .orElseThrow(() -> new IllegalStateException(
@@ -115,6 +150,9 @@ public class EventIngestionService {
         try {
             // ── Step 5: Apply server-side defaults ─────────────────
             enricher.enrich(request, inbound);
+
+            // Update MDC with enriched correlationId
+            MDC.put("correlationId", inbound.getCorrelationId());
 
             // ── Step 6: Payload validation (branched by datacontenttype)
             try {
@@ -142,8 +180,12 @@ public class EventIngestionService {
                         ex.getMessage());
                 throw new KafkaPublishException("cce.events.inbound", ex);
             }
-        } catch (PayloadValidationException | KafkaPublishException ex) {
+        } catch (PayloadValidationException ex) {
             // Already handled above — rethrow as-is
+            incrementRejectedCounter(ex.getRejectionReason().name());
+            throw ex;
+        } catch (KafkaPublishException ex) {
+            incrementRejectedCounter(RejectionReason.KAFKA_PUBLISH_FAILURE.name());
             throw ex;
         } catch (Exception ex) {
             // Safety net: unexpected failure after persist — record rejection
@@ -151,13 +193,28 @@ public class EventIngestionService {
             log.error("Unexpected error during post-persist processing for id={}: {}",
                     inbound.getId(), ex.getMessage(), ex);
             safeRecordRejection(inbound, RejectionReason.INTERNAL_ERROR, ex.getMessage());
+            incrementRejectedCounter(RejectionReason.INTERNAL_ERROR.name());
             throw ex;
         }
 
+        acceptedCounter.increment();
+        timerSample.stop(ingestionTimer);
         return buildResponse(inbound);
     }
 
     // ────────────────────────────────────────────────────────────────
+
+    /**
+     * Increment the {@code cce.collector.events.rejected} counter with a
+     * {@code reason} tag distinguishing the rejection cause.
+     */
+    private void incrementRejectedCounter(String reason) {
+        Counter.builder("cce.collector.events.rejected")
+                .tag("reason", reason)
+                .description("Events rejected by reason")
+                .register(meterRegistry)
+                .increment();
+    }
 
     /**
      * Attempt to record a rejection, swallowing any exception so the original

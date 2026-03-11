@@ -1,6 +1,7 @@
 package org.openphc.cce.collector.kafka;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -57,7 +58,8 @@ class InboundEventProducerTest {
         kafkaTopicProperties = new KafkaTopicProperties();
         kafkaTopicProperties.getTopics().setInbound(TOPIC);
         kafkaTopicProperties.setPublishTimeoutSeconds(TIMEOUT_SECONDS);
-        producer = new InboundEventProducer(kafkaTemplate, kafkaTopicProperties);
+        producer = new InboundEventProducer(kafkaTemplate, kafkaTopicProperties,
+                new SimpleMeterRegistry());
     }
 
     private EventIngestionRequest buildRequest() {
