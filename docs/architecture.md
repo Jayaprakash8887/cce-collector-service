@@ -80,7 +80,7 @@ It receives clinical events from external EHR/RHIE systems (via openHIM mediator
 org.openphc.cce.collector/
 ├── CollectorServiceApplication.java       # Spring Boot entry point
 ├── config/                                # Spring configuration beans
-│   ├── KafkaProducerConfig.java           #   Kafka producer factory, templates, topic creation
+│   ├── KafkaTopicProperties.java          #   @ConfigurationProperties for cce.kafka.* topic names & publish timeout
 │   ├── FhirConfig.java                    #   FhirContext.forR4() singleton bean
 │   ├── JpaConfig.java                     #   Enables JPA repositories & transactions
 │   ├── SecurityConfig.java                #   Stateless security, CSRF disabled
@@ -222,17 +222,22 @@ The unique constraint on `inbound_event` serves as the permanent deduplication l
 | Topic | Key | Purpose |
 |-------|-----|---------|
 | `cce.events.inbound` | `subject` (patient UPID) | Validated events for Compliance Service |
-| `cce.deadletter` | `correlationId` | Rejected/failed events for monitoring (optional) |
+
+> **Note:** Rejected events are tracked in `inbound_event` (status = REJECTED, rejection_reason, error_details). No dead-letter topic is implemented — rejection monitoring is done via database queries and the `cce.collector.rejected.count` gauge metric.
 
 ### Producer Configuration
 
-| Setting | Value | Rationale |
-|---------|-------|-----------|
-| `acks` | `all` | Wait for all in-sync replicas |
-| `retries` | `3` | Retry on transient failures |
-| `enable.idempotence` | `true` | Exactly-once within a partition |
-| `linger.ms` | `5` | Small batching window |
-| Partitions | 12 | Supports 12 parallel consumers |
+All producer settings are env-var-configurable via `application.yml` (see Deployment Guide for full env var reference).
+
+| Setting | Default | Env Var | Rationale |
+|---------|---------|---------|--------|
+| `acks` | `all` | `SPRING_KAFKA_PRODUCER_ACKS` | Wait for all in-sync replicas |
+| `retries` | `3` | `SPRING_KAFKA_PRODUCER_RETRIES` | Retry on transient failures (production: 5) |
+| `enable.idempotence` | `true` | — | Exactly-once within a partition |
+| `linger.ms` | `5` | `KAFKA_LINGER_MS` | Small batching window (production: 10) |
+| `batch.size` | `16384` | `KAFKA_BATCH_SIZE` | 16 KB batch size (production: 32 KB) |
+| `buffer.memory` | `33554432` | `KAFKA_BUFFER_MEMORY` | 32 MB producer buffer |
+| Partitions | 12 | — | Supports 12 parallel consumers |
 
 ### Kafka Publish
 

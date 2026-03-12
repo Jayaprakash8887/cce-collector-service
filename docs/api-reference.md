@@ -26,7 +26,7 @@ Ingest a single CloudEvents-formatted clinical event.
 | `id` | `string` | Yes | Unique event identifier from source (max 50 chars) |
 | `source` | `string` | Yes | Event source URI (e.g., `ebuzima/kigali-south`) |
 | `type` | `string` | Yes | Event type (e.g., `cce.encounter.created`) |
-| `subject` | `string` | Yes | Patient UPID (e.g., `patient/UPI-RW-2024-000001`) |
+| `subject` | `string` | Yes | Patient UPID (e.g., `260225-0002-5501`) |
 | `time` | `string` | No | ISO-8601 timestamp (filled by server if absent) |
 | `datacontenttype` | `string` | Yes | MIME type of data (`application/fhir+json` or `application/json`) |
 | `data` | `object` | Yes | Event payload (FHIR R4 resource) |
@@ -47,7 +47,7 @@ Ingest a single CloudEvents-formatted clinical event.
   "id": "evt-encounter-2024-001234",
   "source": "ebuzima/kigali-south",
   "type": "cce.encounter.created",
-  "subject": "patient/UPI-RW-2024-000001",
+  "subject": "260225-0002-5501",
   "time": "2025-01-15T09:30:00Z",
   "datacontenttype": "application/fhir+json",
   "facilityid": "facility/FAC-KGL-S-001",
@@ -62,7 +62,7 @@ Ingest a single CloudEvents-formatted clinical event.
       "display": "ambulatory"
     },
     "subject": {
-      "reference": "Patient/UPI-RW-2024-000001"
+      "reference": "Patient/260225-0002-5501"
     },
     "period": {
       "start": "2025-01-15T09:00:00Z",
@@ -209,9 +209,10 @@ Multi-word field names follow the CloudEvents convention of concatenated lowerca
 
 ## 6. Rate Limits & Constraints
 
-| Constraint | Value |
-|-----------|-------|
-| Max event ID length | 50 characters |
-| Dedup lookback window | 30 days (configurable) |
-| Kafka publish retries | 3 (producer-level) |
-| Max payload size | 1 MB |
+| Constraint | Value | Env Var |
+|-----------|-------|--------|
+| Max event ID length | 50 characters | — |
+| Dedup lookback window | 30 days (configurable) | `CCE_COLLECTOR_DEDUP_LOOKBACK_DAYS` |
+| Kafka publish retries | 3 (producer-level) | `SPRING_KAFKA_PRODUCER_RETRIES` |
+| Kafka publish timeout | 30 seconds | `CCE_COLLECTOR_KAFKA_PUBLISH_TIMEOUT_SECONDS` |
+| Max payload size | 1 MB | `CCE_COLLECTOR_MAX_PAYLOAD_SIZE` |

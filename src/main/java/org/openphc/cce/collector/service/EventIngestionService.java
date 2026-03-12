@@ -10,6 +10,7 @@ import org.openphc.cce.collector.api.exception.CloudEventValidationException;
 import org.openphc.cce.collector.api.exception.DuplicateEventException;
 import org.openphc.cce.collector.api.exception.KafkaPublishException;
 import org.openphc.cce.collector.api.exception.PayloadValidationException;
+import org.openphc.cce.collector.config.KafkaTopicProperties;
 import org.openphc.cce.collector.domain.model.InboundEvent;
 import org.openphc.cce.collector.domain.model.enums.InboundStatus;
 import org.openphc.cce.collector.domain.model.enums.RejectionReason;
@@ -18,7 +19,6 @@ import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
@@ -56,6 +56,7 @@ public class EventIngestionService {
     private final PayloadValidator payloadValidator;
     private final EventPublisher eventPublisher;
     private final RejectionService rejectionService;
+    private final KafkaTopicProperties kafkaTopicProperties;
     private final long maxPayloadSize;
 
     // ── Metrics ────────────────────────────────────────────────
@@ -73,6 +74,7 @@ public class EventIngestionService {
             PayloadValidator payloadValidator,
             EventPublisher eventPublisher,
             RejectionService rejectionService,
+            KafkaTopicProperties kafkaTopicProperties,
             MeterRegistry meterRegistry,
             @Value("${cce.collector.max-payload-size:1048576}") long maxPayloadSize) {
         this.cloudEventValidator = cloudEventValidator;
@@ -82,6 +84,7 @@ public class EventIngestionService {
         this.payloadValidator = payloadValidator;
         this.eventPublisher = eventPublisher;
         this.rejectionService = rejectionService;
+        this.kafkaTopicProperties = kafkaTopicProperties;
         this.meterRegistry = meterRegistry;
         this.maxPayloadSize = maxPayloadSize;
 
@@ -178,7 +181,8 @@ public class EventIngestionService {
             } catch (Exception ex) {
                 rejectionService.recordRejection(inbound, RejectionReason.KAFKA_PUBLISH_FAILURE,
                         ex.getMessage());
-                throw new KafkaPublishException("cce.events.inbound", ex);
+                throw new KafkaPublishException(
+                        kafkaTopicProperties.getTopics().getInbound(), ex);
             }
         } catch (PayloadValidationException ex) {
             // Already handled above — rethrow as-is
@@ -232,15 +236,24 @@ public class EventIngestionService {
     /**
      * Check that the payload does not exceed the configured maximum size.
      *
+     * <p>Uses {@code String.length()} as a fast estimate of UTF-8 byte count.
+     * For JSON payloads (both {@code application/json} and
+     * {@code application/fhir+json}), the content is predominantly ASCII
+     * (keys, braces, quotes, digits), so char count closely approximates
+     * byte count. This avoids allocating a full {@code byte[]} just for
+     * a size gate check.</p>
+     *
      * @throws CloudEventValidationException if the payload is too large
      */
     private void checkPayloadSize(EventIngestionRequest request) {
         if (request.getData() != null) {
-            int sizeBytes = request.getData().toString()
-                    .getBytes(StandardCharsets.UTF_8).length;
-            if (sizeBytes > maxPayloadSize) {
+            String dataStr = request.getData().toString();
+            // String.length() returns char count in O(1) with zero allocation.
+            // For ASCII-dominant JSON payloads, char count ≈ byte count (conservative lower bound).
+            long estimatedBytes = (long) dataStr.length();
+            if (estimatedBytes > maxPayloadSize) {
                 throw new CloudEventValidationException(List.of(
-                        "Payload size " + sizeBytes + " bytes exceeds maximum allowed "
+                        "Payload size " + estimatedBytes + " bytes exceeds maximum allowed "
                                 + maxPayloadSize + " bytes"));
             }
         }

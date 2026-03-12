@@ -3,12 +3,18 @@
 # ============================================================
 
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
   shutdown: graceful
+  tomcat:
+    threads:
+      max: ${TOMCAT_THREADS_MAX:200}
 
 spring:
   application:
     name: cce-collector-service
+
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
 
   # ---------- Jackson ----------
   jackson:
@@ -25,9 +31,9 @@ spring:
     hikari:
       maximum-pool-size: ${SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE:10}
       minimum-idle: ${SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE:5}
-      idle-timeout: 300000
-      max-lifetime: 600000
-      connection-timeout: 30000
+      idle-timeout: ${SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT:300000}
+      max-lifetime: ${SPRING_DATASOURCE_HIKARI_MAX_LIFETIME:600000}
+      connection-timeout: ${SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT:30000}
       pool-name: cce-collector-pool
 
   # ---------- JPA / Hibernate ----------
@@ -59,8 +65,9 @@ spring:
       properties:
         enable.idempotence: true
         max.in.flight.requests.per.connection: 5
-        linger.ms: 5
-        batch.size: 16384
+        linger.ms: ${KAFKA_LINGER_MS:5}
+        batch.size: ${KAFKA_BATCH_SIZE:16384}
+        buffer.memory: ${KAFKA_BUFFER_MEMORY:33554432}
 
 # ---------- Actuator ----------
 management:

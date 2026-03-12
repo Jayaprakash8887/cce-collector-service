@@ -1,14 +1,23 @@
 # ============================================================
 # CCE Collector Service — Staging Profile
 # ============================================================
+# Activate: --spring.profiles.active=staging
+# Purpose:  Pre-production environment. Moderate pool sizes,
+#           INFO logging, environment-variable-driven config.
+# Inherits: all other values from application.yml
+# ============================================================
+
+server:
+  tomcat:
+    threads:
+      max: ${TOMCAT_THREADS_MAX:100}
 
 spring:
   datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/cce_collector}
     hikari:
-      maximum-pool-size: 15
-      minimum-idle: 5
+      maximum-pool-size: ${SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE:15}
 
 logging:
   level:
-    org.openphc.cce.collector: INFO
     org.springframework.kafka: INFO

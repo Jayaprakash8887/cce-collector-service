@@ -15,7 +15,8 @@ public class CloudEventValidationException extends RuntimeException {
     private final List<String> validationErrors;
 
     public CloudEventValidationException(List<String> validationErrors) {
-        super("CloudEvents validation failed: " + String.join("; ", validationErrors));
+        super("CloudEvents validation failed: " + String.join("; ", validationErrors),
+                null, false, false);
         this.validationErrors = List.copyOf(validationErrors);
     }
 

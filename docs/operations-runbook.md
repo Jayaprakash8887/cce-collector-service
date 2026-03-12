@@ -55,20 +55,24 @@ GET /actuator/prometheus
 
 #### Ingestion Throughput
 
-| Metric | Description |
-|--------|-------------|
-| `cce_events_received_total` | Total events received (counter) |
-| `cce_events_accepted_total` | Events accepted (counter) |
-| `cce_events_rejected_total` | Events rejected (counter) |
-| `cce_events_duplicated_total` | Duplicate events detected (counter) |
-| `cce_events_published_total` | Events published to Kafka (counter) |
+| Metric | Type | Description |
+|--------|------|-------------|
+| `cce.collector.events.received` | Counter | Total events received at POST /v1/events |
+| `cce.collector.events.accepted` | Counter | Events accepted (passed validation + published to Kafka) |
+| `cce.collector.events.rejected` | Counter (`reason` tag) | Events rejected, tagged by `RejectionReason` enum value |
+| `cce.collector.events.duplicate` | Counter | Duplicate events detected |
+| `cce.collector.rejected.count` | Gauge | Current count of REJECTED events in `inbound_event` (polled on scrape) |
+| `cce.collector.kafka.publish.success` | Counter | Successful Kafka publishes |
+| `cce.collector.kafka.publish.failure` | Counter | Failed Kafka publishes |
+
+> **Prometheus format:** Micrometer converts dots to underscores and appends `_total` for counters (e.g., `cce_collector_events_received_total`).
 
 #### Latency
 
 | Metric | Description |
 |--------|-------------|
 | `http_server_requests_seconds` | HTTP request latency (histogram) |
-| `cce_kafka_publish_seconds` | Kafka publish latency (histogram) |
+| `cce.collector.ingestion.duration` | Full ingestion pipeline duration (timer) |
 
 #### Infrastructure
 
@@ -86,7 +90,7 @@ groups:
   - name: cce-collector-alerts
     rules:
       - alert: HighRejectionRate
-        expr: rate(cce_events_rejected_total[5m]) / rate(cce_events_received_total[5m]) > 0.1
+        expr: rate(cce_collector_events_rejected_total[5m]) / rate(cce_collector_events_received_total[5m]) > 0.1
         for: 5m
         labels:
           severity: warning
@@ -95,7 +99,7 @@ groups:
           description: "More than 10% of events are being rejected. Check source systems."
 
       - alert: KafkaPublishFailures
-        expr: rate(cce_events_published_total{status="failed"}[5m]) > 0
+        expr: rate(cce_collector_kafka_publish_failure_total[5m]) > 0
         for: 2m
         labels:
           severity: critical
@@ -104,7 +108,7 @@ groups:
           description: "Events failing to publish to Kafka. Check broker connectivity."
 
       - alert: RejectedEventBacklog
-        expr: cce_rejected_events_total > 100
+        expr: cce_collector_rejected_count > 100
         for: 10m
         labels:
           severity: warning
@@ -124,12 +128,12 @@ groups:
 
 Recommended panels for a Collector Service dashboard:
 
-1. **Events per second** — `rate(cce_events_received_total[1m])`
-2. **Acceptance rate** — `rate(cce_events_accepted_total[1m]) / rate(cce_events_received_total[1m])`
-3. **Duplicate rate** — `rate(cce_events_duplicated_total[1m]) / rate(cce_events_received_total[1m])`
+1. **Events per second** — `rate(cce_collector_events_received_total[1m])`
+2. **Acceptance rate** — `rate(cce_collector_events_accepted_total[1m]) / rate(cce_collector_events_received_total[1m])`
+3. **Duplicate rate** — `rate(cce_collector_events_duplicate_total[1m]) / rate(cce_collector_events_received_total[1m])`
 4. **P95 ingestion latency** — `histogram_quantile(0.95, rate(http_server_requests_seconds_bucket{uri="/v1/events"}[5m]))`
-5. **Kafka publish latency** — `histogram_quantile(0.95, rate(cce_kafka_publish_seconds_bucket[5m]))`
-6. **Rejected event backlog** — `cce_rejected_events_total`
+5. **Kafka publish success/failure** — `rate(cce_collector_kafka_publish_success_total[1m])` vs `rate(cce_collector_kafka_publish_failure_total[1m])`
+6. **Rejected event backlog** — `cce_collector_rejected_count`
 7. **DB connection pool** — `hikaricp_connections_active` vs `hikaricp_connections_idle`
 
 ---
@@ -181,12 +185,15 @@ WHERE source = 'ebuzima/broken-facility'
 | Reason | Description | Action |
 |--------|-------------|--------|
 | `INVALID_ENVELOPE` | CloudEvents required fields missing/invalid | Fix source system event format |
-| `MISSING_REQUIRED_FIELD` | CCE-required field (e.g., subject) missing | Fix source system to include patient UPID |
-| `INVALID_SPEC_VERSION` | specversion is not "1.0" | Fix source system |
-| `INVALID_FHIR` | FHIR R4 payload cannot be parsed | Fix FHIR resource in source system |
-| `KAFKA_PUBLISH_FAILED` | Kafka broker unreachable | Check Kafka cluster health |
-| `PROCESSING_ERROR` | Unexpected error during processing | Check application logs |
-| `DUPLICATE` | Not rejected — handled as idempotent | N/A |
+| `MISSING_SUBJECT` | `subject` field missing (required by CCE for patient routing) | Fix source system to include patient UPID |
+| `INVALID_FHIR` | FHIR R4 payload cannot be parsed (when `datacontenttype` = `application/fhir+json`) | Fix FHIR resource in source system |
+| `INVALID_JSON` | Non-FHIR JSON payload is not valid JSON or is empty | Fix JSON in source system |
+| `UNSUPPORTED_CONTENT_TYPE` | `datacontenttype` not `application/fhir+json` or `application/json` | Fix `datacontenttype` header |
+| `PAYLOAD_TOO_LARGE` | Request body exceeds `max-payload-size` (default 1 MB) | Reduce payload size or increase limit |
+| `DESERIALIZATION_ERROR` | Request body could not be parsed as JSON | Fix malformed request body |
+| `KAFKA_PUBLISH_FAILURE` | Kafka broker unreachable or publish timed out | Check Kafka cluster health |
+| `INTERNAL_ERROR` | Unexpected error during post-persist processing | Check application logs — safety net for orphaned RECEIVED records |
+| `DUPLICATE` | Not rejected — idempotent handling of duplicate (id, source) | N/A — source system retry behaviour |
 
 ---
 
@@ -322,7 +329,7 @@ The service uses **structured JSON logging** (Logstash encoder). Each log line c
   "correlationId": "corr-abc123",
   "source": "ebuzima/kigali-south",
   "eventId": "evt-001",
-  "subject": "patient/UPI-RW-2024-000001"
+  "subject": "260225-0002-5501"
 }
 ```
 

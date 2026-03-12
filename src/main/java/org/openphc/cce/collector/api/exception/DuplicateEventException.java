@@ -29,7 +29,8 @@ public class DuplicateEventException extends RuntimeException {
 
     public DuplicateEventException(UUID eventId, UUID existingRecordId) {
         super("Duplicate event detected: eventId=" + eventId
-                + ", existingRecordId=" + existingRecordId);
+                + ", existingRecordId=" + existingRecordId,
+                null, false, false);
         this.eventId = eventId;
         this.existingRecordId = existingRecordId;
     }
