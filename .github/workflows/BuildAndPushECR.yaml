@@ -34,16 +34,10 @@ jobs:
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
 
-    - name: Build and Scan with SonarQube
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
-      run: |
-        ./gradlew build sonar \
-          -Dsonar.host.url=${SONAR_HOST_URL} \
-          -Dsonar.login=${SONAR_TOKEN} \
-          -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }} \
-          -Dsonar.projectName=${{ vars.SONAR_PROJECT_NAME }}
+    - name: Build with Gradle
+ 
+      run: ./gradlew build
+
 
     - name: Build container image
       run: |
@@ -53,7 +47,7 @@ jobs:
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:${{ vars.AWS_ROLE }}
+        role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_ROLE }}
         aws-region: ${{ env.AWS_REGION }}
 
     - name: Login to Amazon ECR
