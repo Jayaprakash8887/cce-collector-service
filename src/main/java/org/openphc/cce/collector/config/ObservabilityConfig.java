@@ -7,6 +7,7 @@ import org.openphc.cce.collector.domain.repository.InboundEventRepository;
 import org.springframework.boot.actuate.autoconfigure.metrics.MeterRegistryCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 
 /**
  * Observability configuration for the CCE Collector Service.
@@ -41,7 +42,7 @@ public class ObservabilityConfig {
      */
     @Bean
     public MeterRegistryCustomizer<MeterRegistry> rejectedCountGaugeCustomizer(
-            InboundEventRepository repository) {
+            @Lazy InboundEventRepository repository) {
         return registry -> Gauge.builder(
                         "cce.collector.rejected.count",
                         repository,
