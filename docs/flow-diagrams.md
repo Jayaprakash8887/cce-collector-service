@@ -60,7 +60,7 @@ sequenceDiagram
     participant Dedup as DeduplicationService
     participant Repo as InboundEventRepository
     participant Defaults as EventDefaultsEnricher
-    participant FHIR as FhirPayloadValidator
+    participant PV as PayloadValidator
     participant Kafka as Kafka Broker
 
     Client->>Controller: POST /v1/events (CloudEvents JSON)

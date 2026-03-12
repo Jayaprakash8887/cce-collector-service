@@ -18,46 +18,56 @@ Detailed reference for all Kafka topics, message schemas, publishing contracts, 
 | **Guarantees** | At-least-once delivery (idempotent producer, synchronous publish) |
 | **Ordering** | Per-patient ordering within a partition (key = patient UPID) |
 
-### 1.2 `cce.deadletter` — Rejected Event Monitoring Topic (Optional)
+### 1.2 Rejected Event Handling
 
-| Property | Value |
-|----------|-------|
-| **Topic** | `cce.deadletter` |
-| **Direction** | Produced by Collector (optional, for Kafka-based monitoring) |
-| **Message Key** | `subject` (patient UPID, if available) |
-| **Message Value** | Rejected event summary JSON |
-| **Purpose** | Downstream alerting/monitoring of rejected events |
+Rejected events are **not** published to a Kafka topic. They are tracked directly in the `inbound_event` database table with `status = 'REJECTED'`, `rejection_reason`, and `error_details` columns. This avoids a dependency on Kafka for monitoring rejections.
 
-> **Note:** The primary rejection record is stored in `inbound_event` (with `status = REJECTED`, `rejection_reason`, and `error_details`). Publishing to `cce.deadletter` is optional and intended for external monitoring systems that consume Kafka rather than query the database.
+Operational monitoring of rejections is supported via:
+- **Database queries** — see the Operations Runbook for SQL examples
+- **Prometheus gauge** — `cce.collector.rejected.count` tracks the current count of rejected events
+- **Per-reason counter** — `cce.collector.events.rejected` with a `reason` tag
 
 ---
 
 ## 2. Producer Configuration
 
+Kafka producer settings are defined in `application.yml` with environment variable overrides. No dedicated `@Configuration` class — Spring Boot auto-configuration is used.
+
 ```yaml
 spring:
   kafka:
-    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-      acks: all
-      retries: 3
+      acks: ${SPRING_KAFKA_PRODUCER_ACKS:all}
+      retries: ${SPRING_KAFKA_PRODUCER_RETRIES:3}
       properties:
         enable.idempotence: true
         max.in.flight.requests.per.connection: 5
-        linger.ms: 5
-        batch.size: 16384
+        linger.ms: ${KAFKA_LINGER_MS:5}
+        batch.size: ${KAFKA_BATCH_SIZE:16384}
+        buffer.memory: ${KAFKA_BUFFER_MEMORY:33554432}
 ```
 
-| Setting | Value | Rationale |
-|---------|-------|-----------|
-| `acks` | `all` | Wait for all in-sync replicas — no data loss |
-| `retries` | `3` | Retry transient failures |
-| `enable.idempotence` | `true` | Prevent duplicate messages on retry |
-| `max.in.flight.requests.per.connection` | `5` | Max with idempotence enabled (Kafka requirement) |
-| `linger.ms` | `5` | Slight batching delay for throughput |
-| `batch.size` | `16384` | 16 KB batch size |
+| Setting | Default | Env Var | Rationale |
+|---------|---------|---------|--------|
+| `acks` | `all` | `SPRING_KAFKA_PRODUCER_ACKS` | Wait for all in-sync replicas — no data loss |
+| `retries` | `3` | `SPRING_KAFKA_PRODUCER_RETRIES` | Retry transient failures (production: 5) |
+| `enable.idempotence` | `true` | — | Prevent duplicate messages on retry |
+| `max.in.flight.requests.per.connection` | `5` | — | Max with idempotence enabled (Kafka requirement) |
+| `linger.ms` | `5` | `KAFKA_LINGER_MS` | Slight batching delay for throughput (production: 10) |
+| `batch.size` | `16384` | `KAFKA_BATCH_SIZE` | 16 KB batch size (production: 32 KB) |
+| `buffer.memory` | `33554432` | `KAFKA_BUFFER_MEMORY` | 32 MB producer memory buffer |
+
+### Topic Configuration
+
+Topic names and publish timeout are managed via `KafkaTopicProperties` (`@ConfigurationProperties(prefix = "cce.kafka")`):
+
+| Property | Default | Env Var |
+|----------|---------|--------|
+| `cce.kafka.topics.inbound` | `cce.events.inbound` | `CCE_COLLECTOR_KAFKA_TOPICS_INBOUND` |
+| `cce.kafka.publish-timeout-seconds` | `30` | `CCE_COLLECTOR_KAFKA_PUBLISH_TIMEOUT_SECONDS` |
 
 ---
 
@@ -376,8 +386,16 @@ The Compliance Service consumes from `cce.events.inbound` with these guarantees 
 
 The Collector records these Kafka-related metrics via Micrometer:
 
-| Metric | Tags | Description |
-|--------|------|-------------|
-| `cce.collector.events.received` | `source`, `status` | Events received by source and outcome (`accepted`, `rejected`, `duplicate`) |
-| `cce.collector.ingestion.duration` | — | End-to-end ingestion latency (includes Kafka publish) |
-| Spring Kafka `kafka.producer.*` | — | Standard Kafka producer metrics (record-send-rate, record-error-rate, etc.) |
+| Metric | Type | Tags | Description |
+|--------|------|------|-------------|
+| `cce.collector.events.received` | Counter | — | Total events received at POST /v1/events |
+| `cce.collector.events.accepted` | Counter | — | Events that passed all validation and were published |
+| `cce.collector.events.duplicate` | Counter | — | Duplicate events detected |
+| `cce.collector.events.rejected` | Counter | `reason` | Events rejected, tagged by `RejectionReason` enum value |
+| `cce.collector.ingestion.duration` | Timer | — | Full ingestion pipeline duration (end-to-end) |
+| `cce.collector.rejected.count` | Gauge | — | Current count of REJECTED events in `inbound_event` (polled on scrape) |
+| `cce.collector.kafka.publish.success` | Counter | — | Successful Kafka publishes |
+| `cce.collector.kafka.publish.failure` | Counter | — | Failed Kafka publishes |
+| Spring Kafka `kafka.producer.*` | — | — | Standard Kafka producer metrics (record-send-rate, record-error-rate, etc.) |
+
+> **Prometheus format:** Micrometer converts dots to underscores and appends `_total` for counters (e.g., `cce_collector_events_received_total`).

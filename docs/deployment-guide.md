@@ -45,16 +45,16 @@ Or using Gradle:
 ./gradlew bootRun --args='--spring.profiles.active=local'
 ```
 
-The application will start on port **8080**.
+The application will start on port **8081** (local profile override).
 
 ### 2.4 Verify
 
 ```bash
 # Health check
-curl http://localhost:8080/actuator/health
+curl http://localhost:8081/actuator/health
 
 # Submit a test event
-curl -X POST http://localhost:8080/v1/events \
+curl -X POST http://localhost:8081/v1/events \
   -H "Content-Type: application/json" \
   -d '{
     "specversion": "1.0",
@@ -89,6 +89,13 @@ java -jar build/libs/cce-collector-service-1.0.0-SNAPSHOT.jar \
 
 All configuration can be overridden via environment variables using Spring Boot's relaxed binding:
 
+### Server
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SERVER_PORT` | `8080` | HTTP listen port |
+| `TOMCAT_THREADS_MAX` | `200` | Maximum Tomcat worker threads |
+
 ### Database
 
 | Variable | Default | Description |
@@ -98,6 +105,9 @@ All configuration can be overridden via environment variables using Spring Boot'
 | `SPRING_DATASOURCE_PASSWORD` | `cce_pass` | Database password |
 | `SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE` | `10` | Connection pool max size |
 | `SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE` | `5` | Connection pool min idle |
+| `SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT` | `300000` | Idle connection timeout (ms) |
+| `SPRING_DATASOURCE_HIKARI_MAX_LIFETIME` | `600000` | Max connection lifetime (ms) |
+| `SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT` | `30000` | Connection acquisition timeout (ms) |
 
 ### Kafka
 
@@ -106,6 +116,9 @@ All configuration can be overridden via environment variables using Spring Boot'
 | `SPRING_KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | Kafka broker(s) |
 | `SPRING_KAFKA_PRODUCER_ACKS` | `all` | Producer acknowledgement level |
 | `SPRING_KAFKA_PRODUCER_RETRIES` | `3` | Producer retry count |
+| `KAFKA_LINGER_MS` | `5` | Producer batching delay (ms) |
+| `KAFKA_BATCH_SIZE` | `16384` | Producer batch size (bytes) |
+| `KAFKA_BUFFER_MEMORY` | `33554432` | Producer buffer memory (bytes) |
 
 ### Application-Specific
 
@@ -113,8 +126,9 @@ All configuration can be overridden via environment variables using Spring Boot'
 |----------|---------|-------------|
 | `CCE_COLLECTOR_FHIR_STRICT_VALIDATION` | `false` | Enable strict FHIR validation |
 | `CCE_COLLECTOR_DEDUP_LOOKBACK_DAYS` | `30` | Dedup lookback window (days) |
+| `CCE_COLLECTOR_MAX_PAYLOAD_SIZE` | `1048576` | Max event payload size (bytes, ~1 MB) |
 | `CCE_COLLECTOR_KAFKA_TOPICS_INBOUND` | `cce.events.inbound` | Inbound events topic |
-| `CCE_COLLECTOR_KAFKA_TOPICS_DEAD_LETTER` | `cce.deadletter` | Rejected event monitoring topic (optional) |
+| `CCE_COLLECTOR_KAFKA_PUBLISH_TIMEOUT_SECONDS` | `30` | Synchronous Kafka publish timeout (seconds) |
 
 ---
 
@@ -282,14 +296,9 @@ kafka-topics.sh --create \
   --partitions 12 \
   --replication-factor 3 \
   --bootstrap-server kafka:9092
-
-# Rejected event monitoring topic (optional, 3 partitions, replication factor 3)
-kafka-topics.sh --create \
-  --topic cce.deadletter \
-  --partitions 3 \
-  --replication-factor 3 \
-  --bootstrap-server kafka:9092
 ```
+
+> **Note:** Rejected events are tracked in `inbound_event` (database). No dead-letter Kafka topic is implemented.
 
 ### Recommended Topic Configuration
 
@@ -309,6 +318,7 @@ kafka-topics.sh --create \
 - [ ] Kafka: Set `min.insync.replicas=2` on inbound topic
 - [ ] Application: Set `SPRING_PROFILES_ACTIVE=production`
 - [ ] Application: Set real database credentials via secrets
+- [ ] Application: Verify graceful shutdown (`server.shutdown=graceful`, `timeout-per-shutdown-phase=30s`)
 - [ ] Monitoring: Expose `/actuator/prometheus` to Prometheus scraper
 - [ ] Logging: Configure log aggregation (ELK/Loki) — JSON structured output enabled by default
 - [ ] TLS: Terminate TLS at load balancer or ingress controller
