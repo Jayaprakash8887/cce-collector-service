@@ -19,7 +19,8 @@ public class PayloadValidationException extends RuntimeException {
     private final RejectionReason rejectionReason;
 
     public PayloadValidationException(List<String> validationErrors, RejectionReason rejectionReason) {
-        super("Payload validation failed: " + String.join("; ", validationErrors));
+        super("Payload validation failed: " + String.join("; ", validationErrors),
+                null, false, false);
         this.validationErrors = List.copyOf(validationErrors);
         this.rejectionReason = rejectionReason;
     }

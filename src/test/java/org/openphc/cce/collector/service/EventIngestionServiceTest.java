@@ -17,6 +17,7 @@ import org.openphc.cce.collector.api.exception.CloudEventValidationException;
 import org.openphc.cce.collector.api.exception.DuplicateEventException;
 import org.openphc.cce.collector.api.exception.PayloadValidationException;
 import org.openphc.cce.collector.api.exception.KafkaPublishException;
+import org.openphc.cce.collector.config.KafkaTopicProperties;
 import org.openphc.cce.collector.domain.model.InboundEvent;
 import org.openphc.cce.collector.domain.model.enums.InboundStatus;
 import org.openphc.cce.collector.domain.model.enums.RejectionReason;
@@ -61,6 +62,7 @@ class EventIngestionServiceTest {
 
     private SimpleMeterRegistry meterRegistry;
     private EventIngestionService service;
+    private KafkaTopicProperties kafkaTopicProperties;
 
     private static final long MAX_PAYLOAD_SIZE = 1_048_576L; // 1 MB
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -75,6 +77,7 @@ class EventIngestionServiceTest {
     @BeforeEach
     void setUp() {
         meterRegistry = new SimpleMeterRegistry();
+        kafkaTopicProperties = new KafkaTopicProperties();
         service = new EventIngestionService(
                 cloudEventValidator,
                 deduplicationService,
@@ -83,6 +86,7 @@ class EventIngestionServiceTest {
                 payloadValidator,
                 eventPublisher,
                 rejectionService,
+                kafkaTopicProperties,
                 meterRegistry,
                 MAX_PAYLOAD_SIZE
         );

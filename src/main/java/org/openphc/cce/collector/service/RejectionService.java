@@ -31,13 +31,22 @@ public class RejectionService {
      * @param errorDetails human-readable error description (may be truncated
      *                     to fit the {@code text} column)
      */
+    private static final int MAX_ERROR_DETAILS_LENGTH = 4000;
+
     public void recordRejection(InboundEvent event, RejectionReason reason, String errorDetails) {
         event.setStatus(InboundStatus.REJECTED);
         event.setRejectionReason(reason.name());
-        event.setErrorDetails(errorDetails);
+        event.setErrorDetails(truncate(errorDetails, MAX_ERROR_DETAILS_LENGTH));
         repository.save(event);
 
         log.warn("Event rejected: id={}, cloudeventsId={}, reason={}, details={}",
                 event.getId(), event.getCloudeventsId(), reason, errorDetails);
+    }
+
+    private static String truncate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength - 3) + "...";
     }
 }

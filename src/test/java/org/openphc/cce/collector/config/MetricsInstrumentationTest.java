@@ -15,6 +15,7 @@ import org.openphc.cce.collector.api.dto.EventIngestionRequest;
 import org.openphc.cce.collector.api.exception.CloudEventValidationException;
 import org.openphc.cce.collector.api.exception.DuplicateEventException;
 import org.openphc.cce.collector.api.exception.KafkaPublishException;
+import org.openphc.cce.collector.config.KafkaTopicProperties;
 import org.openphc.cce.collector.api.exception.PayloadValidationException;
 import org.openphc.cce.collector.domain.model.InboundEvent;
 import org.openphc.cce.collector.domain.model.enums.InboundStatus;
@@ -66,10 +67,11 @@ class MetricsInstrumentationTest {
     @BeforeEach
     void setUp() {
         meterRegistry = new SimpleMeterRegistry();
+        KafkaTopicProperties kafkaTopicProperties = new KafkaTopicProperties();
         service = new EventIngestionService(
                 cloudEventValidator, deduplicationService, repository,
                 enricher, payloadValidator, eventPublisher, rejectionService,
-                meterRegistry, 1_048_576L);
+                kafkaTopicProperties, meterRegistry, 1_048_576L);
 
         lenient().when(payloadValidator.validatePayload(any()))
                 .thenReturn(PayloadValidationResult.builder()
