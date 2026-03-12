@@ -85,7 +85,6 @@ org.openphc.cce.collector/
 │   ├── JpaConfig.java                     #   Enables JPA repositories & transactions
 │   ├── SecurityConfig.java                #   Stateless security, CSRF disabled
 │   ├── WebConfig.java                     #   CORS configuration
-│   ├── ObservabilityConfig.java           #   Micrometer common tags, rejected-count gauge
 │   ├── KafkaHealthIndicator.java          #   Custom health indicator for Kafka broker connectivity
 │   └── RequestLoggingFilter.java          #   OncePerRequestFilter: sets MDC requestId per request
 ├── domain/
@@ -223,7 +222,7 @@ The unique constraint on `inbound_event` serves as the permanent deduplication l
 |-------|-----|---------|
 | `cce.events.inbound` | `subject` (patient UPID) | Validated events for Compliance Service |
 
-> **Note:** Rejected events are tracked in `inbound_event` (status = REJECTED, rejection_reason, error_details). No dead-letter topic is implemented — rejection monitoring is done via database queries and the `cce.collector.rejected.count` gauge metric.
+> **Note:** Rejected events are tracked in `inbound_event` (status = REJECTED, rejection_reason, error_details). No dead-letter topic is implemented — rejection monitoring is done via database queries and the `cce.collector.events.rejected` counter metric (tagged by reason).
 
 ### Producer Configuration
 

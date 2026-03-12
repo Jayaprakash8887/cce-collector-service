@@ -347,7 +347,6 @@ GET /actuator/prometheus
 | `cce_collector_kafka_publish_failure_total` | Counter | Failed Kafka publishes |
 | `cce_collector_ingestion_duration_seconds` | Timer | Full pipeline duration |
 | `cce_collector_fhir_validation_duration_seconds` | Timer | FHIR validation time |
-| `cce_collector_rejected_count` | Gauge | Current count of REJECTED events in DB |
 
 ### Logging
 

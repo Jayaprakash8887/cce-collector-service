@@ -61,7 +61,6 @@ GET /actuator/prometheus
 | `cce.collector.events.accepted` | Counter | Events accepted (passed validation + published to Kafka) |
 | `cce.collector.events.rejected` | Counter (`reason` tag) | Events rejected, tagged by `RejectionReason` enum value |
 | `cce.collector.events.duplicate` | Counter | Duplicate events detected |
-| `cce.collector.rejected.count` | Gauge | Current count of REJECTED events in `inbound_event` (polled on scrape) |
 | `cce.collector.kafka.publish.success` | Counter | Successful Kafka publishes |
 | `cce.collector.kafka.publish.failure` | Counter | Failed Kafka publishes |
 
@@ -107,14 +106,6 @@ groups:
           summary: "Kafka publish failures detected"
           description: "Events failing to publish to Kafka. Check broker connectivity."
 
-      - alert: RejectedEventBacklog
-        expr: cce_collector_rejected_count > 100
-        for: 10m
-        labels:
-          severity: warning
-        annotations:
-          summary: "Rejected event backlog growing"
-
       - alert: DBConnectionPoolExhausted
         expr: hikaricp_connections_pending > 0
         for: 1m
@@ -133,8 +124,7 @@ Recommended panels for a Collector Service dashboard:
 3. **Duplicate rate** — `rate(cce_collector_events_duplicate_total[1m]) / rate(cce_collector_events_received_total[1m])`
 4. **P95 ingestion latency** — `histogram_quantile(0.95, rate(http_server_requests_seconds_bucket{uri="/v1/events"}[5m]))`
 5. **Kafka publish success/failure** — `rate(cce_collector_kafka_publish_success_total[1m])` vs `rate(cce_collector_kafka_publish_failure_total[1m])`
-6. **Rejected event backlog** — `cce_collector_rejected_count`
-7. **DB connection pool** — `hikaricp_connections_active` vs `hikaricp_connections_idle`
+6. **DB connection pool** — `hikaricp_connections_active` vs `hikaricp_connections_idle`
 
 ---
 

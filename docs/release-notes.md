@@ -113,7 +113,6 @@ All rejected events are persisted to `inbound_event` with the appropriate status
 | `cce.collector.events.duplicate` | Counter | — | Duplicate events detected |
 | `cce.collector.events.rejected` | Counter | `reason` | Rejected events by reason |
 | `cce.collector.ingestion.duration` | Timer | — | End-to-end processing time |
-| `cce.collector.rejected.count` | Gauge | — | Current rejected event count (from DB) |
 | `cce.collector.kafka.publish.success` | Counter | — | Successful Kafka publishes |
 | `cce.collector.kafka.publish.failure` | Counter | — | Failed Kafka publishes |
 

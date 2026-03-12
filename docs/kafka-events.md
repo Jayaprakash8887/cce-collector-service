@@ -24,7 +24,6 @@ Rejected events are **not** published to a Kafka topic. They are tracked directl
 
 Operational monitoring of rejections is supported via:
 - **Database queries** — see the Operations Runbook for SQL examples
-- **Prometheus gauge** — `cce.collector.rejected.count` tracks the current count of rejected events
 - **Per-reason counter** — `cce.collector.events.rejected` with a `reason` tag
 
 ---
@@ -393,7 +392,6 @@ The Collector records these Kafka-related metrics via Micrometer:
 | `cce.collector.events.duplicate` | Counter | — | Duplicate events detected |
 | `cce.collector.events.rejected` | Counter | `reason` | Events rejected, tagged by `RejectionReason` enum value |
 | `cce.collector.ingestion.duration` | Timer | — | Full ingestion pipeline duration (end-to-end) |
-| `cce.collector.rejected.count` | Gauge | — | Current count of REJECTED events in `inbound_event` (polled on scrape) |
 | `cce.collector.kafka.publish.success` | Counter | — | Successful Kafka publishes |
 | `cce.collector.kafka.publish.failure` | Counter | — | Failed Kafka publishes |
 | Spring Kafka `kafka.producer.*` | — | — | Standard Kafka producer metrics (record-send-rate, record-error-rate, etc.) |
