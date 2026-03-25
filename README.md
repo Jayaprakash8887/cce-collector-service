@@ -283,6 +283,11 @@ SELECT * FROM inbound_event WHERE id = '<uuid>';
 | `cce.collector.fhir.strict-validation` | `false` | FHIR strict validation mode |
 | `cce.kafka.topics.inbound` | `cce.events.inbound` | Kafka inbound topic name |
 | `cce.kafka.publish-timeout-seconds` | `30` | Kafka synchronous publish timeout |
+| `cce.kafka.topic-config.partitions` | `25` | Inbound topic partition count |
+| `cce.kafka.topic-config.replication-factor` | `1` | Inbound topic replication factor |
+| `cce.kafka.topic-config.retention-ms` | `604800000` | Inbound topic retention (ms, 7 days) |
+| `cce.kafka.topic-config.cleanup-policy` | `delete` | Inbound topic cleanup policy |
+| `cce.kafka.topic-config.min-insync-replicas` | `1` | Inbound topic min in-sync replicas |
 
 ### Environment Variables
 
@@ -298,6 +303,11 @@ All properties can be overridden via environment variables:
 | `DB_PASSWORD` | `spring.datasource.password` | local, staging, production |
 | `KAFKA_BOOTSTRAP` | `spring.kafka.bootstrap-servers` | All profiles |
 | `KAFKA_BUFFER_MEMORY` | `spring.kafka.producer.properties.buffer.memory` | production |
+| `CCE_COLLECTOR_KAFKA_TOPIC_PARTITIONS` | `cce.kafka.topic-config.partitions` | All profiles |
+| `CCE_COLLECTOR_KAFKA_TOPIC_REPLICATION_FACTOR` | `cce.kafka.topic-config.replication-factor` | All profiles |
+| `CCE_COLLECTOR_KAFKA_TOPIC_RETENTION_MS` | `cce.kafka.topic-config.retention-ms` | All profiles |
+| `CCE_COLLECTOR_KAFKA_TOPIC_CLEANUP_POLICY` | `cce.kafka.topic-config.cleanup-policy` | All profiles |
+| `CCE_COLLECTOR_KAFKA_TOPIC_MIN_INSYNC_REPLICAS` | `cce.kafka.topic-config.min-insync-replicas` | All profiles |
 | `TOMCAT_THREADS_MAX` | `server.tomcat.threads.max` | staging, production |
 | `HIKARI_MAX_POOL_SIZE` | `spring.datasource.hikari.maximum-pool-size` | staging, production |
 | `HIKARI_MIN_IDLE` | `spring.datasource.hikari.minimum-idle` | staging, production |
