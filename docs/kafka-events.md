@@ -30,7 +30,7 @@ Operational monitoring of rejections is supported via:
 
 ## 2. Producer Configuration
 
-Kafka producer settings are defined in `application.yml` with environment variable overrides. No dedicated `@Configuration` class — Spring Boot auto-configuration is used.
+Kafka producer settings are defined in `application.yml` with environment variable overrides. Topic creation is handled by `KafkaTopicConfig`, a `@Configuration` class that declares a `NewTopic` bean for auto-creating the inbound topic on startup. Spring Boot auto-configuration is used for producer settings.
 
 ```yaml
 spring:
@@ -67,6 +67,20 @@ Topic names and publish timeout are managed via `KafkaTopicProperties` (`@Config
 |----------|---------|--------|
 | `cce.kafka.topics.inbound` | `cce.events.inbound` | `CCE_COLLECTOR_KAFKA_TOPICS_INBOUND` |
 | `cce.kafka.publish-timeout-seconds` | `30` | `CCE_COLLECTOR_KAFKA_PUBLISH_TIMEOUT_SECONDS` |
+
+### Topic Creation Configuration
+
+Topic creation settings are managed via `KafkaTopicProperties.TopicConfig` (`cce.kafka.topic-config.*`). The `KafkaTopicConfig` class declares a `NewTopic` bean that creates the topic on startup if it doesn't exist.
+
+| Property | Default | Env Var | Production Override |
+|----------|---------|--------|--------------------|
+| `cce.kafka.topic-config.partitions` | `25` | `CCE_COLLECTOR_KAFKA_TOPIC_PARTITIONS` | 25 |
+| `cce.kafka.topic-config.replication-factor` | `1` | `CCE_COLLECTOR_KAFKA_TOPIC_REPLICATION_FACTOR` | 3 |
+| `cce.kafka.topic-config.retention-ms` | `604800000` (7 days) | `CCE_COLLECTOR_KAFKA_TOPIC_RETENTION_MS` | 604800000 |
+| `cce.kafka.topic-config.cleanup-policy` | `delete` | `CCE_COLLECTOR_KAFKA_TOPIC_CLEANUP_POLICY` | delete |
+| `cce.kafka.topic-config.min-insync-replicas` | `1` | `CCE_COLLECTOR_KAFKA_TOPIC_MIN_INSYNC_REPLICAS` | 2 |
+
+> **Note:** If the topic already exists, the broker will not alter partitions or replication factor. To change partitions on an existing topic, use `kafka-topics.sh --alter`.
 
 ---
 

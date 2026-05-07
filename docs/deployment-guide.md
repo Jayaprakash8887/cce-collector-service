@@ -129,6 +129,11 @@ All configuration can be overridden via environment variables using Spring Boot'
 | `CCE_COLLECTOR_MAX_PAYLOAD_SIZE` | `1048576` | Max event payload size (bytes, ~1 MB) |
 | `CCE_COLLECTOR_KAFKA_TOPICS_INBOUND` | `cce.events.inbound` | Inbound events topic |
 | `CCE_COLLECTOR_KAFKA_PUBLISH_TIMEOUT_SECONDS` | `30` | Synchronous Kafka publish timeout (seconds) |
+| `CCE_COLLECTOR_KAFKA_TOPIC_PARTITIONS` | `25` | Inbound topic partition count |
+| `CCE_COLLECTOR_KAFKA_TOPIC_REPLICATION_FACTOR` | `1` | Inbound topic replication factor |
+| `CCE_COLLECTOR_KAFKA_TOPIC_RETENTION_MS` | `604800000` | Inbound topic retention (ms, default 7 days) |
+| `CCE_COLLECTOR_KAFKA_TOPIC_CLEANUP_POLICY` | `delete` | Inbound topic cleanup policy |
+| `CCE_COLLECTOR_KAFKA_TOPIC_MIN_INSYNC_REPLICAS` | `1` | Inbound topic min in-sync replicas |
 
 ---
 
@@ -287,20 +292,40 @@ stringData:
 
 ## 8. Kafka Topic Setup
 
-If auto-creation is disabled, create topics manually:
+The application auto-creates the `cce.events.inbound` topic on startup via a `NewTopic` bean in `KafkaTopicConfig`. Topic properties are configurable via `cce.kafka.topic-config.*` in `application.yml` or environment variables.
+
+### Default Topic Configuration
+
+| Setting | Default | Production Override | Env Var |
+|---------|---------|--------------------|---------|
+| `partitions` | `25` | `25` | `CCE_COLLECTOR_KAFKA_TOPIC_PARTITIONS` |
+| `replication-factor` | `1` | `3` | `CCE_COLLECTOR_KAFKA_TOPIC_REPLICATION_FACTOR` |
+| `retention.ms` | `604800000` (7 days) | `604800000` | `CCE_COLLECTOR_KAFKA_TOPIC_RETENTION_MS` |
+| `cleanup.policy` | `delete` | `delete` | `CCE_COLLECTOR_KAFKA_TOPIC_CLEANUP_POLICY` |
+| `min.insync.replicas` | `1` | `2` | `CCE_COLLECTOR_KAFKA_TOPIC_MIN_INSYNC_REPLICAS` |
+
+> **Note:** If the topic already exists, the broker will not alter partitions or replication factor. To change partitions on an existing topic, use:
+> ```bash
+> kafka-topics.sh --alter \
+>   --topic cce.events.inbound \
+>   --partitions 25 \
+>   --bootstrap-server kafka:9092
+> ```
+
+To pre-create the topic manually (e.g., if broker auto-creation is disabled):
 
 ```bash
-# Inbound events topic (12 partitions, replication factor 3)
+# Inbound events topic (25 partitions, replication factor 3 for production)
 kafka-topics.sh --create \
   --topic cce.events.inbound \
-  --partitions 12 \
+  --partitions 25 \
   --replication-factor 3 \
   --bootstrap-server kafka:9092
 ```
 
 > **Note:** Rejected events are tracked in `inbound_event` (database). No dead-letter Kafka topic is implemented.
 
-### Recommended Topic Configuration
+### Recommended Production Topic Configuration
 
 | Setting | Value | Rationale |
 |---------|-------|-----------|
@@ -314,8 +339,8 @@ kafka-topics.sh --create \
 
 - [ ] PostgreSQL: Create database `cce_collector`, grant permissions to `cce_user`
 - [ ] PostgreSQL: Tune `shared_buffers`, `work_mem`, `effective_cache_size`
-- [ ] Kafka: Create topics with production replication factor (≥ 3)
-- [ ] Kafka: Set `min.insync.replicas=2` on inbound topic
+- [ ] Kafka: Verify topic auto-creation on startup (25 partitions, replication factor 3 via production profile)
+- [ ] Kafka: Confirm `min.insync.replicas=2` on inbound topic
 - [ ] Application: Set `SPRING_PROFILES_ACTIVE=production`
 - [ ] Application: Set real database credentials via secrets
 - [ ] Application: Verify graceful shutdown (`server.shutdown=graceful`, `timeout-per-shutdown-phase=30s`)

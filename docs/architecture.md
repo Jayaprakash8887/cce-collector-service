@@ -80,7 +80,8 @@ It receives clinical events from external EHR/RHIE systems (via openHIM mediator
 org.openphc.cce.collector/
 ├── CollectorServiceApplication.java       # Spring Boot entry point
 ├── config/                                # Spring configuration beans
-│   ├── KafkaTopicProperties.java          #   @ConfigurationProperties for cce.kafka.* topic names & publish timeout
+│   ├── KafkaTopicProperties.java          #   @ConfigurationProperties for cce.kafka.* topic names, publish timeout & topic creation config
+│   ├── KafkaTopicConfig.java              #   Declares NewTopic bean for auto-creation on startup
 │   ├── FhirConfig.java                    #   FhirContext.forR4() singleton bean
 │   ├── JpaConfig.java                     #   Enables JPA repositories & transactions
 │   ├── SecurityConfig.java                #   Stateless security, CSRF disabled
@@ -236,7 +237,20 @@ All producer settings are env-var-configurable via `application.yml` (see Deploy
 | `linger.ms` | `5` | `KAFKA_LINGER_MS` | Small batching window (production: 10) |
 | `batch.size` | `16384` | `KAFKA_BATCH_SIZE` | 16 KB batch size (production: 32 KB) |
 | `buffer.memory` | `33554432` | `KAFKA_BUFFER_MEMORY` | 32 MB producer buffer |
-| Partitions | 12 | — | Supports 12 parallel consumers |
+
+### Topic Auto-Creation
+
+`KafkaTopicConfig` declares a `NewTopic` bean that creates the inbound topic on startup (if it doesn't already exist). Configuration is managed via `KafkaTopicProperties.TopicConfig` (`cce.kafka.topic-config.*`):
+
+| Setting | Default | Env Var | Production Override |
+|---------|---------|---------|--------------------|
+| `partitions` | `25` | `CCE_COLLECTOR_KAFKA_TOPIC_PARTITIONS` | 25 |
+| `replication-factor` | `1` | `CCE_COLLECTOR_KAFKA_TOPIC_REPLICATION_FACTOR` | 3 |
+| `retention-ms` | `604800000` (7 days) | `CCE_COLLECTOR_KAFKA_TOPIC_RETENTION_MS` | 604800000 |
+| `cleanup-policy` | `delete` | `CCE_COLLECTOR_KAFKA_TOPIC_CLEANUP_POLICY` | delete |
+| `min-insync-replicas` | `1` | `CCE_COLLECTOR_KAFKA_TOPIC_MIN_INSYNC_REPLICAS` | 2 |
+
+> **Note:** If the topic already exists, the broker will not alter partitions or replication factor. To change partitions on an existing topic, use `kafka-topics.sh --alter`.
 
 ### Kafka Publish
 

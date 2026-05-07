@@ -180,6 +180,12 @@ cce:
   kafka:
     topic: ${CCE_KAFKA_TOPIC:cce.events.inbound}
     publish-timeout: ${CCE_KAFKA_PUBLISH_TIMEOUT:10s}
+    topic-config:
+      partitions: ${CCE_COLLECTOR_KAFKA_TOPIC_PARTITIONS:25}
+      replication-factor: ${CCE_COLLECTOR_KAFKA_TOPIC_REPLICATION_FACTOR:1}
+      retention-ms: ${CCE_COLLECTOR_KAFKA_TOPIC_RETENTION_MS:604800000}
+      cleanup-policy: ${CCE_COLLECTOR_KAFKA_TOPIC_CLEANUP_POLICY:delete}
+      min-insync-replicas: ${CCE_COLLECTOR_KAFKA_TOPIC_MIN_INSYNC_REPLICAS:1}
   deduplication:
     lookback-hours: ${CCE_DEDUP_LOOKBACK_HOURS:24}
   validation:
@@ -217,7 +223,7 @@ N/A — initial release.
 ### Migration Notes
 
 1. **Database:** Flyway auto-applies `V1__create_inbound_event.sql` on first startup
-2. **Kafka:** Topic `cce.events.inbound` must exist or be auto-created by the broker
+2. **Kafka:** Topic `cce.events.inbound` is auto-created on startup by `KafkaTopicConfig` (25 partitions, RF 1 by default; production profile: RF 3, min-insync-replicas 2)
 3. **Docker:** Run `docker compose up -d` to start PostgreSQL and Kafka before the application
 
 ---
