@@ -183,11 +183,63 @@ WHERE cloudevents_id = :cloudeventsId AND source = :source;
 
 ---
 
+### 2.4 Publish `inbound_event_id` in Kafka CloudEvents
+
+**Problem:** The Compliance Service's `event_log` table duplicates 6 columns already present in `inbound_event` (`cloudevents_id`, `source`, `source_event_id`, `subject`, `type`, `event_time`). To normalize `event_log` with an `inbound_event_id` FK (see **Compliance Service §2.9**), the Compliance Service needs to know the `inbound_event.id` (UUID) at processing time. Currently, the Collector only publishes the `EventIngestionRequest` payload — the persisted entity's primary key is not included.
+
+**Solution:** After persisting the `InboundEvent` (Step 7 in `EventIngestionService.ingest()` — status set to ACCEPTED, entity saved with UUIDv7 ID), set the entity's `id` on the `EventIngestionRequest` as a new CCE extension attribute before publishing to Kafka (Step 8).
+
+**Code changes:**
+
+1. **`EventIngestionRequest.java`** — Add field:
+   ```java
+   private String inboundeventid;  // CCE extension: inbound_event PK (UUIDv7)
+   ```
+
+2. **`EventIngestionService.ingest()`** — Between Step 7 (save) and Step 8 (publish):
+   ```java
+   // Step 7: Update status = ACCEPTED
+   inbound.setStatus(InboundStatus.ACCEPTED);
+   inbound = repository.save(inbound);
+
+   // Step 7.5: Attach persisted ID to the request for downstream services
+   request.setInboundeventid(inbound.getId().toString());
+
+   // Step 8: Synchronous Kafka publish
+   eventPublisher.publish(request);
+   ```
+
+**Downstream impact:**
+- The Compliance Service's `ComplianceEngine` reads `inboundeventid` from the CloudEvent message (same pattern as `facilityid`, `correlationid`, etc.) and sets it on `EventLog.inboundEventId`
+- Enables **Compliance Service §2.9** — `event_log` normalization via `inbound_event_id` FK
+- The extension attribute is optional — existing events without it are handled gracefully (FK remains NULL, backfilled via `cloudeventsid + source` match)
+
+**Kafka message change:**
+
+```json
+{
+  "specversion": "1.0",
+  "id": "evt-abc-123",
+  "source": "openmrs/facility-1",
+  "type": "org.openmrs.event.Encounter",
+  "subject": "patient/upid-001",
+  "facilityid": "facility-1",
+  "correlationid": "corr-xyz-456",
+  "inboundeventid": "019012ab-cdef-7890-abcd-ef1234567890",
+  "data": { "resourceType": "Encounter", ... }
+}
+```
+
+> **Backward compatibility:** The `inboundeventid` extension is additive. Existing consumers that don't read this attribute are unaffected. The Compliance Service should treat a missing `inboundeventid` as NULL (no FK set).
+
+---
+
 ## 3. Consistency Guarantees
 
 - **`ingestion_summary_daily`** — Updated synchronously in the same transaction as the `InboundEvent` persist. No consistency lag.
 - **`event_volume_daily`** — Updated synchronously after ACCEPTED determination. Counts are always consistent with `inbound_event.status`.
 - **`matched` flag** — Updated by Compliance Service asynchronously (separate transaction). There is a brief window where a newly processed event shows `matched = false`. This is acceptable for dashboard-level accuracy (the Insights Service cache TTL is 15–30 minutes).
+- **`inboundeventid` extension** — Set after entity persist and before Kafka publish. The ID is guaranteed to exist in the database before the message is published. If the Kafka publish fails, the event is rejected (no orphan references).
 
 ### 3.1 Backfill Strategy
 
@@ -234,6 +286,7 @@ WHERE ie.status = 'ACCEPTED'
 | New `ingestion_summary_daily` table | Table | New | Collector | Every event ingestion |
 | New `event_volume_daily` table | Table | New | Collector | ACCEPTED events |
 | Add `matched` to `inbound_event` | Column | Existing | Compliance Service | Event processing |
+| Publish `inboundeventid` CloudEvents extension | Kafka message | — | Collector | ACCEPTED events (Step 8) |
 
 ### 4.1 Flyway Migration Plan
 
