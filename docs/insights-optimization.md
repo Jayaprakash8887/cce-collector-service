@@ -2,13 +2,14 @@
 
 > **CCE Collector Service** — Pre-computed ingestion metrics for the Insights Service  
 > **Status**: Proposed | **Target**: v1.2.0  
-> **Last Updated**: 2026-05-11
+> **Last Updated**: 2026-05-14  
+> **Deployment Model**: Fresh deployment (no existing data to migrate)
 
 ---
 
 ## 1. Problem Statement
 
-The CCE Insights Service executes 18 queries against the `inbound_event` table (owned by the Collector Service) and 13 queries against `event_log` for event volume analytics. At production scale, these queries face two critical bottlenecks:
+The CCE Insights Service executes 18 queries against the `inbound_event` table (owned by the Collector Service) and 13 queries against `compliance_event_log` for event volume analytics. At production scale, these queries face two critical bottlenecks:
 
 ### 1.1 Full-Table Aggregations
 
@@ -27,11 +28,11 @@ Every dashboard load triggers `GROUP BY` aggregations across the entire `inbound
 
 Two queries have O(n²) worst-case complexity:
 
-1. **Pipeline loss detection** — `NOT EXISTS` anti-join correlating `inbound_event` (ACCEPTED) with `event_log`:
+1. **Pipeline loss detection** — `NOT EXISTS` anti-join correlating `inbound_event` (ACCEPTED) with `compliance_event_log`:
    ```sql
    SELECT COUNT(*) FROM inbound_event ie
    WHERE ie.status = 'ACCEPTED'
-     AND NOT EXISTS (SELECT 1 FROM event_log el
+     AND NOT EXISTS (SELECT 1 FROM compliance_event_log el
                      WHERE el.cloudeventsid = ie.cloudevents_id
                        AND el.source = ie.source)
    ```
@@ -104,9 +105,9 @@ DO UPDATE SET
 
 ### 2.2 New Table: `event_volume_daily`
 
-**Problem:** The Insights Service runs 7+ queries on `event_log` for event volume distribution (by resource type, facility, source, processing status). These are GROUP BY aggregations on millions of rows that change slowly relative to query frequency.
+**Problem:** The Insights Service runs 7+ queries on `compliance_event_log` for event volume distribution (by resource type, facility, source, processing status). These are GROUP BY aggregations on millions of rows that change slowly relative to query frequency.
 
-> **Note:** `event_log` is owned by the Compliance Service. However, the Collector Service is the natural owner of *event volume* pre-aggregation because it is the first service in the pipeline and has access to all event metadata before downstream processing.
+> **Note:** `compliance_event_log` is owned by the Compliance Service. However, the Collector Service is the natural owner of *event volume* pre-aggregation because it is the first service in the pipeline and has access to all event metadata before downstream processing.
 
 **Solution:** The Collector Service writes a separate volume summary; the Compliance Service updates it post-processing with `processing_status`.
 
@@ -154,18 +155,20 @@ DO UPDATE SET
 
 ### 2.3 Pipeline Loss Detection — Batch Approach
 
-**Problem:** Pipeline loss detection (`NOT EXISTS` anti-join between `inbound_event` and `event_log`) is O(n²) worst-case and queries both tables on every dashboard load.
+**Problem:** Pipeline loss detection (`NOT EXISTS` anti-join between `inbound_event` and `compliance_event_log`) is O(n²) worst-case and queries both tables on every dashboard load.
 
-**Solution:** Rather than pre-computing in the Collector, this is better addressed by adding a `matched` boolean column to `inbound_event` that the Compliance Service sets when it processes the event. This converts the expensive anti-join to a simple `WHERE matched = false` filter.
+**Solution (fresh deploy):** Include a `matched` boolean column on `inbound_event` from the initial schema. The Compliance Service sets it when it processes the event.
 
-**Schema change (on `inbound_event`):**
+**Schema (included in initial `inbound_event` DDL):**
 
 ```sql
-ALTER TABLE inbound_event ADD COLUMN matched BOOLEAN DEFAULT false;
+-- Within CREATE TABLE inbound_event:
+    matched BOOLEAN DEFAULT false,
+-- Index:
 CREATE INDEX idx_inbound_event_unmatched ON inbound_event (matched) WHERE matched = false;
 ```
 
-**Cross-service update:** The Compliance Service, after successfully matching an inbound event (recording it in `event_log` with `processing_status = MATCHED`), updates the corresponding `inbound_event` row:
+**Cross-service update:** The Compliance Service, after successfully matching an inbound event (recording it in `compliance_event_log` with `processing_status = MATCHED`), updates the corresponding `inbound_event` row:
 
 ```sql
 UPDATE inbound_event SET matched = true
@@ -185,7 +188,7 @@ WHERE cloudevents_id = :cloudeventsId AND source = :source;
 
 ### 2.4 Publish `inbound_event_id` in Kafka CloudEvents
 
-**Problem:** The Compliance Service's `event_log` table duplicates 6 columns already present in `inbound_event` (`cloudevents_id`, `source`, `source_event_id`, `subject`, `type`, `event_time`). To normalize `event_log` with an `inbound_event_id` FK (see **Compliance Service §2.9**), the Compliance Service needs to know the `inbound_event.id` (UUID) at processing time. Currently, the Collector only publishes the `EventIngestionRequest` payload — the persisted entity's primary key is not included.
+**Problem:** The Compliance Service's `compliance_event_log` table duplicates 6 columns already present in `inbound_event` (`cloudevents_id`, `source`, `source_event_id`, `subject`, `type`, `event_time`). To normalize `compliance_event_log` with an `inbound_event_id` FK (see **Compliance Service §2.9**), the Compliance Service needs to know the `inbound_event.id` (UUID) at processing time. Currently, the Collector only publishes the `EventIngestionRequest` payload — the persisted entity's primary key is not included.
 
 **Solution:** After persisting the `InboundEvent` (Step 7 in `EventIngestionService.ingest()` — status set to ACCEPTED, entity saved with UUIDv7 ID), set the entity's `id` on the `EventIngestionRequest` as a new CCE extension attribute before publishing to Kafka (Step 8).
 
@@ -211,7 +214,7 @@ WHERE cloudevents_id = :cloudeventsId AND source = :source;
 
 **Downstream impact:**
 - The Compliance Service's `ComplianceEngine` reads `inboundeventid` from the CloudEvent message (same pattern as `facilityid`, `correlationid`, etc.) and sets it on `EventLog.inboundEventId`
-- Enables **Compliance Service §2.9** — `event_log` normalization via `inbound_event_id` FK
+- Enables **Compliance Service §2.9** — `compliance_event_log` normalization via `inbound_event_id` FK
 - The extension attribute is optional — existing events without it are handled gracefully (FK remains NULL, backfilled via `cloudeventsid + source` match)
 
 **Kafka message change:**
@@ -241,41 +244,9 @@ WHERE cloudevents_id = :cloudeventsId AND source = :source;
 - **`matched` flag** — Updated by Compliance Service asynchronously (separate transaction). There is a brief window where a newly processed event shows `matched = false`. This is acceptable for dashboard-level accuracy (the Insights Service cache TTL is 15–30 minutes).
 - **`inboundeventid` extension** — Set after entity persist and before Kafka publish. The ID is guaranteed to exist in the database before the message is published. If the Kafka publish fails, the event is rejected (no orphan references).
 
-### 3.1 Backfill Strategy
+### 3.1 No Backfill Required
 
-```sql
--- ingestion_summary_daily backfill
-INSERT INTO ingestion_summary_daily (summary_date, source, facility_id, status, rejection_reason, resource_type, event_count)
-SELECT
-    DATE(received_at),
-    source,
-    facility_id,
-    status::VARCHAR,
-    rejection_reason,
-    raw_payload->>'resourceType',
-    COUNT(*)
-FROM inbound_event
-GROUP BY DATE(received_at), source, facility_id, status, rejection_reason, raw_payload->>'resourceType';
-
--- event_volume_daily backfill
-INSERT INTO event_volume_daily (summary_date, source, facility_id, resource_type, event_count)
-SELECT
-    DATE(received_at),
-    source,
-    facility_id,
-    raw_payload->>'resourceType',
-    COUNT(*)
-FROM inbound_event
-WHERE status = 'ACCEPTED'
-GROUP BY DATE(received_at), source, facility_id, raw_payload->>'resourceType';
-
--- matched flag backfill
-UPDATE inbound_event ie SET matched = true
-WHERE ie.status = 'ACCEPTED'
-  AND EXISTS (SELECT 1 FROM event_log el
-              WHERE el.cloudeventsid = ie.cloudevents_id
-                AND el.source = ie.source);
-```
+Since this is a fresh deployment with no existing data, all optimizations are included in the initial schema from day 1. Summary tables populate organically as events are ingested. No backfill migrations are needed.
 
 ---
 
@@ -288,10 +259,12 @@ WHERE ie.status = 'ACCEPTED'
 | Add `matched` to `inbound_event` | Column | Existing | Compliance Service | Event processing |
 | Publish `inboundeventid` CloudEvents extension | Kafka message | — | Collector | ACCEPTED events (Step 8) |
 
-### 4.1 Flyway Migration Plan
+### 4.1 Flyway Migration Plan (Fresh Deployment)
+
+All optimizations are included in the initial schema:
 
 | Order | Migration | Description |
 |-------|-----------|-------------|
-| V2 | `V2__create_ingestion_summary_daily.sql` | Create table + backfill |
-| V3 | `V3__create_event_volume_daily.sql` | Create table + backfill |
-| V4 | `V4__add_matched_to_inbound_event.sql` | Add column + partial index + backfill |
+| V1 | `V1__initial_schema.sql` | `inbound_event` table with `matched` column from day 1 |
+| V2 | `V2__create_ingestion_summary_daily.sql` | Pre-computed ingestion summary table |
+| V3 | `V3__create_event_volume_daily.sql` | Pre-computed event volume table |
