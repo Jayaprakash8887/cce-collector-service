@@ -6,6 +6,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.hl7.fhir.r4.model.Encounter;
 import org.hl7.fhir.r4.model.Observation;
 import org.hl7.fhir.r4.model.Condition;
+import org.hl7.fhir.r4.model.Patient;
+import org.hl7.fhir.r4.model.RelatedPerson;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -31,7 +33,7 @@ class FhirResourceValidatorTest {
     static void setup() {
         FhirContext ctx = FhirContext.forR4();
         FhirResourceParser parser = new FhirResourceParser(ctx);
-        PatientIdExtractor patientIdExtractor = new PatientIdExtractor();
+        PatientIdExtractor patientIdExtractor = new PatientIdExtractor("http://openphc.org/identifier/upid");
         validator = new FhirResourceValidator(parser, patientIdExtractor);
     }
 
@@ -74,6 +76,28 @@ class FhirResourceValidatorTest {
             assertThat(result.isValid()).isTrue();
             assertThat(result.getErrors()).isEmpty();
             assertThat(result.getParsedResource()).isInstanceOf(Condition.class);
+        }
+
+        @Test
+        @DisplayName("valid Patient passes without errors")
+        void validPatient() {
+            PayloadValidationResult result = validator.validate(
+                    FhirResourceParserTest.validPatient(), "UPID-12345");
+
+            assertThat(result.isValid()).isTrue();
+            assertThat(result.getErrors()).isEmpty();
+            assertThat(result.getParsedResource()).isInstanceOf(Patient.class);
+        }
+
+        @Test
+        @DisplayName("valid RelatedPerson passes without errors")
+        void validRelatedPerson() {
+            PayloadValidationResult result = validator.validate(
+                    FhirResourceParserTest.validRelatedPerson(), "UPID-12345");
+
+            assertThat(result.isValid()).isTrue();
+            assertThat(result.getErrors()).isEmpty();
+            assertThat(result.getParsedResource()).isInstanceOf(RelatedPerson.class);
         }
     }
 

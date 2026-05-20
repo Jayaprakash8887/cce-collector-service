@@ -12,7 +12,7 @@ Detailed reference for all Kafka topics, message schemas, publishing contracts, 
 |----------|-------|
 | **Topic** | `cce.events.inbound` |
 | **Direction** | Produced by Collector, consumed by Compliance Service |
-| **Message Key** | `subject` (patient UPID) — guarantees per-patient ordering |
+| **Message Key** | `subject` (patient UPID) — guarantees per-patient ordering. Extracted from FHIR resource: Patient `identifier[]` (matching system URI) or `id`; RelatedPerson `patient` reference; other resources via `subject`/`patient` reference |
 | **Message Value** | CloudEvents JSON (lowercase field names per spec) |
 | **Serialization** | Key: `StringSerializer`, Value: `JsonSerializer` |
 | **Guarantees** | At-least-once delivery (idempotent producer, synchronous publish) |

@@ -147,4 +147,23 @@ class FhirResourceParserTest {
                         "code", "active"))),
                 "subject", Map.of("reference", "Patient/UPID-12345")));
     }
+
+    static JsonNode validPatient() {
+        return mapper.valueToTree(Map.of(
+                "resourceType", "Patient",
+                "id", "UPID-12345",
+                "identifier", List.of(Map.of(
+                        "system", "http://openphc.org/identifier/upid",
+                        "value", "UPID-12345")),
+                "name", List.of(Map.of(
+                        "family", "KAYITESI",
+                        "given", List.of("Marie-Claire")))));
+    }
+
+    static JsonNode validRelatedPerson() {
+        return mapper.valueToTree(Map.of(
+                "resourceType", "RelatedPerson",
+                "id", "rp-001",
+                "patient", Map.of("reference", "Patient/UPID-12345")));
+    }
 }

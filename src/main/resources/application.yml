@@ -92,6 +92,7 @@ cce:
     max-payload-size: ${CCE_COLLECTOR_MAX_PAYLOAD_SIZE:1048576}
     fhir:
       strict-validation: ${CCE_COLLECTOR_FHIR_STRICT_VALIDATION:false}
+      patient-identifier-system: ${CCE_COLLECTOR_FHIR_PATIENT_IDENTIFIER_SYSTEM:http://openphc.org/identifier/upid}
   kafka:
     topics:
       inbound: ${CCE_COLLECTOR_KAFKA_TOPICS_INBOUND:cce.events.inbound}

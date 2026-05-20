@@ -1,13 +1,18 @@
 package org.openphc.cce.collector.fhir;
 
 import org.hl7.fhir.instance.model.api.IBaseResource;
+import org.hl7.fhir.r4.model.Identifier;
+import org.hl7.fhir.r4.model.Patient;
 import org.hl7.fhir.r4.model.Reference;
+import org.hl7.fhir.r4.model.RelatedPerson;
 import org.openphc.cce.collector.api.exception.PatientIdNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
+import java.util.List;
 
 /**
  * Extracts the patient UPID from FHIR R4 resources using reflection.
@@ -18,13 +23,15 @@ import java.lang.reflect.Method;
  *
  * <p>Extraction strategy (tried in order):
  * <ol>
+ *   <li>For {@code Patient} resources: extracted from {@code identifier[]}
+ *       matching the configured system URI, falling back to {@code Patient.id}</li>
  *   <li>{@code getSubject()} — used by most clinical resources
  *       (Encounter, Observation, Condition, MedicationRequest, MedicationDispense,
  *       ServiceRequest, Procedure, DiagnosticReport, CarePlan, CareTeam, Goal,
  *       MedicationAdministration, MedicationStatement, RiskAssessment, etc.)</li>
  *   <li>{@code getPatient()} — used by resources that model the patient relationship directly
  *       (EpisodeOfCare, Immunization, AllergyIntolerance, FamilyMemberHistory,
- *       NutritionOrder, Consent, etc.)</li>
+ *       NutritionOrder, Consent, RelatedPerson, etc.)</li>
  * </ol>
  *
  * <p>This reflection-based approach automatically supports any FHIR R4 resource that
@@ -42,10 +49,21 @@ public class PatientIdExtractor {
     /** Method names to try, in priority order. */
     private static final String[] ACCESSOR_METHODS = {"getSubject", "getPatient"};
 
+    private final String patientIdentifierSystem;
+
+    public PatientIdExtractor(
+            @Value("${cce.collector.fhir.patient-identifier-system:http://openphc.org/identifier/upid}")
+            String patientIdentifierSystem) {
+        this.patientIdentifierSystem = patientIdentifierSystem;
+    }
+
     /**
      * Extracts the patient UPID from the given FHIR resource.
      *
-     * <p>Tries {@code getSubject()} first, then {@code getPatient()}.
+     * <p>For Patient resources: extracts from {@code identifier[]} matching the
+     * configured system URI, falling back to {@code Patient.id}.
+     *
+     * <p>For other resources: tries {@code getSubject()} first, then {@code getPatient()}.
      * The first method that exists and returns a non-empty {@link Reference} wins.
      *
      * @param resource the parsed FHIR R4 resource
@@ -58,6 +76,13 @@ public class PatientIdExtractor {
         }
 
         String resourceType = resource.fhirType();
+
+        // Patient resource — the resource IS the patient
+        if (resource instanceof Patient patient) {
+            return extractFromPatientResource(patient);
+        }
+
+        // All other resources — extract from subject/patient reference
         Reference reference = extractReference(resource, resourceType);
 
         if (reference == null || !reference.hasReference()) {
@@ -75,6 +100,42 @@ public class PatientIdExtractor {
 
         log.debug("Extracted patient UPID '{}' from {} resource", patientId, resourceType);
         return patientId;
+    }
+
+    /**
+     * Extracts the UPID from a Patient resource.
+     *
+     * <p>Priority:
+     * <ol>
+     *   <li>{@code identifier[]} entry matching the configured system URI</li>
+     *   <li>{@code Patient.id} as fallback</li>
+     * </ol>
+     */
+    private String extractFromPatientResource(Patient patient) {
+        // Priority 1: identifier with configured UPID system
+        if (patientIdentifierSystem != null) {
+            List<Identifier> identifiers = patient.getIdentifier();
+            for (Identifier identifier : identifiers) {
+                if (patientIdentifierSystem.equals(identifier.getSystem())
+                        && identifier.hasValue() && !identifier.getValue().isBlank()) {
+                    log.debug("Extracted patient UPID '{}' from Patient.identifier[system={}]",
+                            identifier.getValue(), patientIdentifierSystem);
+                    return identifier.getValue();
+                }
+            }
+        }
+
+        // Priority 2: Patient.id
+        String patientId = patient.getIdElement().getIdPart();
+        if (patientId != null && !patientId.isBlank()) {
+            log.debug("Extracted patient UPID '{}' from Patient.id (no matching identifier found)",
+                    patientId);
+            return patientId;
+        }
+
+        throw new PatientIdNotFoundException(
+                "No UPID found in Patient resource — neither identifier[system="
+                        + patientIdentifierSystem + "] nor Patient.id is populated");
     }
 
     /**

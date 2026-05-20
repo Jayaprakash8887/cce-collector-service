@@ -17,14 +17,26 @@
 
 ### 2.1 Start Infrastructure
 
+PostgreSQL and Kafka are shared infrastructure managed outside this service. Start them from the shared `deploy-scripts` repository:
+
 ```bash
-cd /path/to/cce-collector-service-jp
+cd /path/to/deploy-scripts
 docker compose up -d
 ```
 
-This starts:
+This creates the `cce-net` Docker bridge network and starts:
 - **PostgreSQL** on port `5433` (user: `cce_user`, password: `cce_pass`, database: `cce_collector`)
-- **Kafka** on port `9092` (KRaft mode, single broker)
+- **Kafka** on port `29092` (host) / `9092` (inter-container, KRaft mode, single broker)
+- **Kafka UI** on port `8090`
+
+Then deploy the collector service:
+
+```bash
+cd /path/to/cce-collector-service
+docker compose up -d
+```
+
+The collector service connects to the shared infra via the external `deploy-scripts_cce-net` network.
 
 ### 2.2 Build the Application
 
@@ -125,6 +137,7 @@ All configuration can be overridden via environment variables using Spring Boot'
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CCE_COLLECTOR_FHIR_STRICT_VALIDATION` | `false` | Enable strict FHIR validation |
+| `CCE_COLLECTOR_FHIR_PATIENT_IDENTIFIER_SYSTEM` | `http://openphc.org/identifier/upid` | System URI for extracting UPID from Patient.identifier[] |
 | `CCE_COLLECTOR_DEDUP_LOOKBACK_DAYS` | `30` | Dedup lookback window (days) |
 | `CCE_COLLECTOR_MAX_PAYLOAD_SIZE` | `1048576` | Max event payload size (bytes, ~1 MB) |
 | `CCE_COLLECTOR_KAFKA_TOPICS_INBOUND` | `cce.events.inbound` | Inbound events topic |

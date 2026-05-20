@@ -124,7 +124,7 @@ org.openphc.cce.collector/
 └── fhir/
     ├── FhirResourceParser.java            # HAPI FHIR parse + type detection
     ├── FhirResourceValidator.java         # Structural validation + subject cross-check
-    └── PatientIdExtractor.java            # Extracts patient UPID from FHIR resource (subject/patient reference)
+    └── PatientIdExtractor.java            # Extracts patient UPID from FHIR resource (Patient identifier[], subject/patient reference)
 
 src/main/resources/
 ├── application.yml                        # Common config (datasource, kafka, actuator, metrics)
@@ -158,7 +158,11 @@ src/main/resources/
     a. If datacontenttype = application/fhir+json:
        i.   Parse data via HAPI FHIR
        ii.  Validate resourceType is present and parseable
-       iii. Cross-check subject reference against envelope `subject` (reject on mismatch)
+       iii. Cross-check patient UPID against envelope `subject` (reject on mismatch)
+            - Patient resource: extracted from identifier[] matching configured system URI,
+              fallback to Patient.id
+            - RelatedPerson: extracted from patient reference
+            - Other resources: extracted from subject or patient reference
        iv.  If invalid → status = 'REJECTED', rejection_reason = INVALID_FHIR, return 422
     b. If datacontenttype = application/json (non-FHIR):
        i.   Validate data is valid JSON
@@ -271,7 +275,15 @@ FHIR R4 structural validation via HAPI FHIR.
 | `data` parses as valid JSON | Required | Reject (`INVALID_FHIR`) |
 | `data.resourceType` present and non-empty | Required | Reject (`INVALID_FHIR`) |
 | HAPI FHIR can parse into `IBaseResource` | Required | Reject (`INVALID_FHIR`) |
-| `data.subject.reference` matches `subject` | Required | Reject (`INVALID_FHIR`) |
+| Patient UPID matches `subject` | Required | Reject (`INVALID_FHIR`) |
+
+**Patient UPID Extraction Strategy:**
+
+| Resource Type | Extraction Method |
+|---------------|-------------------|
+| `Patient` | From `identifier[]` matching configured system URI (`http://openphc.org/identifier/upid`), fallback to `Patient.id` |
+| `RelatedPerson` | From `patient` reference (`Patient/<UPID>`) |
+| All other resources | From `subject` or `patient` reference (`Patient/<UPID>`) |
 
 ### `application/json` (non-FHIR)
 
