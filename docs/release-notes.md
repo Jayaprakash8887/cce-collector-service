@@ -8,6 +8,35 @@
 **Date:** 2026-03-12  
 **Status:** Feature-complete, 199 tests passing  
 
+---
+
+## v1.0.0-patient — Patient & RelatedPerson Support
+
+**Branch:** `release-1.0.0_patient`  
+**Date:** 2026-03-13  
+**Status:** Feature-complete, all tests passing  
+
+### Summary
+
+Extended `PatientIdExtractor` to properly handle `Patient` and `RelatedPerson` FHIR R4 resources. Previously, the extractor relied solely on reflection to find `getSubject()` or `getPatient()` methods, which failed for `Patient` resources (they have neither). This release adds:
+
+- **Patient resource support**: Extracts UPID from `Patient.identifier[]` matching the configured system URI (`http://openphc.org/identifier/upid`), with fallback to `Patient.id`
+- **Configurable identifier system**: New property `cce.collector.fhir.patient-identifier-system` (env: `CCE_COLLECTOR_FHIR_PATIENT_IDENTIFIER_SYSTEM`)
+- **RelatedPerson**: Confirmed working via existing `getPatient()` reflection path
+
+### New Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CCE_COLLECTOR_FHIR_PATIENT_IDENTIFIER_SYSTEM` | `http://openphc.org/identifier/upid` | System URI for matching Patient.identifier[] to extract UPID |
+
+### Infrastructure Change
+
+- PostgreSQL and Kafka extracted to shared infrastructure (`deploy-scripts/docker-compose.yml` with `cce-net` bridge network)
+- Collector service `docker-compose.yml` now references external `deploy-scripts_cce-net` network
+
+---
+
 ### Overview
 
 First production-ready release of the CCE Collector Service — the single point of entry for all clinical events into the Care Coordination Engine (CCE) platform. The service receives CloudEvents v1.0 envelopes from external EHR/RHIE systems (via openHIM mediators or direct integrations), validates them, deduplicates, persists an audit trail, and publishes accepted events to Kafka for downstream processing by the Compliance Service.
@@ -43,7 +72,7 @@ First production-ready release of the CCE Collector Service — the single point
 | # | Feature | Ticket | Description |
 |---|---------|--------|-------------|
 | 13 | **PostgreSQL Schema** | CCE-49 | `inbound_event` table with UUIDv7 primary keys, Flyway migration `V1__create_inbound_event.sql` |
-| 14 | **Docker Compose** | CCE-49 | PostgreSQL 16 (port 5433) + Kafka 3.7.0 KRaft (port 9092) for local development |
+| 14 | **Docker Compose** | CCE-49 | Collector service container; shared infra (PostgreSQL 16, Kafka 3.7.0 KRaft) managed via `deploy-scripts/docker-compose.yml` on `cce-net` network |
 | 15 | **Profile Configuration** | CCE-63 | `local`, `staging`, `production` profiles with env-var-wrapped values for all tunable settings |
 | 16 | **Graceful Shutdown** | CCE-63 | `server.shutdown: graceful` with 30s drain timeout |
 
@@ -210,6 +239,7 @@ cce:
 - **No rate limiting** — expected to be handled by openHIM / API gateway
 - **No rejected event management endpoints** — query database directly or use Prometheus metrics
 - **FHIR structural validation only** — no profile conformance or terminology validation
+- **Patient UPID extraction** — requires `identifier.system` to match configured URI; resources without `subject`, `patient`, or matching identifier will be rejected
 - **No event type format validation** — `type` field checked for presence only (no pattern enforcement)
 
 ---
@@ -224,7 +254,7 @@ N/A — initial release.
 
 1. **Database:** Flyway auto-applies `V1__create_inbound_event.sql` on first startup
 2. **Kafka:** Topic `cce.events.inbound` is auto-created on startup by `KafkaTopicConfig` (25 partitions, RF 1 by default; production profile: RF 3, min-insync-replicas 2)
-3. **Docker:** Run `docker compose up -d` to start PostgreSQL and Kafka before the application
+3. **Docker:** Start shared infrastructure (`deploy-scripts/docker-compose.yml`) first to create `cce-net` network, then start collector service (`docker compose up -d`)
 
 ---
 

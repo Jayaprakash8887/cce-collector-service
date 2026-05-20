@@ -190,7 +190,8 @@ The Collector accepts any valid FHIR R4 resource when `datacontenttype` is `appl
 | `Consent` | Patient consent records |
 | `EpisodeOfCare` | Care episodes |
 | `CarePlan` | Treatment plans |
-| `Patient` | Patient demographics |
+| `Patient` | Patient demographics (UPID extracted from `identifier[]` matching configured system, fallback to `Patient.id`) |
+| `RelatedPerson` | Related persons (UPID extracted from `patient` reference) |
 
 ---
 
