@@ -3,7 +3,7 @@ package org.openphc.cce.collector.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openphc.cce.collector.config.DeduplicationProperties;
-import org.openphc.cce.collector.domain.repository.InboundEventRepository;
+import org.openphc.cce.collector.domain.repository.InboundEventLogRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
@@ -28,14 +28,14 @@ import java.time.OffsetDateTime;
 @RequiredArgsConstructor
 public class DeduplicationService {
 
-    private final InboundEventRepository repository;
+    private final InboundEventLogRepository repository;
     private final DeduplicationProperties properties;
 
     /**
      * Check whether an event with the given CloudEvents id and source
      * already exists within the configurable lookback window.
      *
-     * <p>Uses {@link InboundEventRepository#existsByCloudeventsIdAndSourceAndReceivedAtAfter}
+     * <p>Uses {@link InboundEventLogRepository#existsByCloudeventsIdAndSourceAndReceivedAtAfter}
      * which returns a lightweight boolean — no entity hydration — keeping
      * the hot path fast.</p>
      *

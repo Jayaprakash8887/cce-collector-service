@@ -6,7 +6,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.openphc.cce.collector.api.dto.EventIngestionRequest;
-import org.openphc.cce.collector.domain.model.InboundEvent;
+import org.openphc.cce.collector.domain.model.InboundEventLog;
 
 import java.time.OffsetDateTime;
 import java.util.Map;
@@ -66,12 +66,10 @@ class EventDefaultsEnricherTest {
     /**
      * Builds a minimal InboundEvent entity with receivedAt set.
      */
-    private InboundEvent baseEntity() {
-        return InboundEvent.builder()
+    private InboundEventLog baseEntity() {
+        return InboundEventLog.builder()
                 .cloudeventsId("evt-001")
                 .source("rhie-mediator")
-                .type("org.openphc.cce.encounter")
-                .subject("UPID-12345")
                 .rawPayload("{\"resourceType\":\"Encounter\"}")
                 .build();
     }
@@ -88,7 +86,7 @@ class EventDefaultsEnricherTest {
         @DisplayName("generates correlationId on both entity and request when absent")
         void generatesWhenAbsent() {
             EventIngestionRequest request = requestWithoutOptionals();
-            InboundEvent entity = baseEntity();
+            InboundEventLog entity = baseEntity();
 
             enricher.enrich(request, entity);
 
@@ -105,7 +103,7 @@ class EventDefaultsEnricherTest {
         @DisplayName("preserves correlationId when present in request")
         void preservesWhenPresent() {
             EventIngestionRequest request = requestWithOptionals();
-            InboundEvent entity = baseEntity();
+            InboundEventLog entity = baseEntity();
 
             enricher.enrich(request, entity);
 
@@ -118,9 +116,9 @@ class EventDefaultsEnricherTest {
         @DisplayName("generates unique correlationId on each call")
         void generatesUniqueIds() {
             EventIngestionRequest req1 = requestWithoutOptionals();
-            InboundEvent ent1 = baseEntity();
+            InboundEventLog ent1 = baseEntity();
             EventIngestionRequest req2 = requestWithoutOptionals();
-            InboundEvent ent2 = baseEntity();
+            InboundEventLog ent2 = baseEntity();
 
             enricher.enrich(req1, ent1);
             enricher.enrich(req2, ent2);
@@ -139,29 +137,26 @@ class EventDefaultsEnricherTest {
     class TimeEnrichment {
 
         @Test
-        @DisplayName("fills eventTime on both entity and request when absent")
+        @DisplayName("fills time on request when absent")
         void fillsWhenAbsent() {
             EventIngestionRequest request = requestWithoutOptionals();
-            InboundEvent entity = baseEntity();
+            InboundEventLog entity = baseEntity();
             OffsetDateTime receivedAt = entity.getReceivedAt();
 
             enricher.enrich(request, entity);
 
-            assertThat(entity.getEventTime()).isEqualTo(receivedAt);
-            // Request is also enriched (for Kafka publishing)
+            // Request is enriched (for Kafka publishing)
             assertThat(request.getTime()).isEqualTo(receivedAt.toString());
         }
 
         @Test
-        @DisplayName("preserves eventTime when present in request")
+        @DisplayName("preserves time when present in request")
         void preservesWhenPresent() {
             EventIngestionRequest request = requestWithOptionals();
-            InboundEvent entity = baseEntity();
+            InboundEventLog entity = baseEntity();
 
             enricher.enrich(request, entity);
 
-            assertThat(entity.getEventTime())
-                    .isEqualTo(OffsetDateTime.parse("2026-03-01T10:00:00Z"));
             // Request is NOT mutated
             assertThat(request.getTime()).isEqualTo("2026-03-01T10:00:00Z");
         }
@@ -180,7 +175,7 @@ class EventDefaultsEnricherTest {
         void typeNeverModified() {
             EventIngestionRequest request = requestWithoutOptionals();
             String originalType = request.getType();
-            InboundEvent entity = baseEntity();
+            InboundEventLog entity = baseEntity();
 
             enricher.enrich(request, entity);
 
@@ -192,7 +187,7 @@ class EventDefaultsEnricherTest {
         void arbitraryTypePassesThrough() {
             EventIngestionRequest request = requestWithoutOptionals();
             request.setType("any.arbitrary.string");
-            InboundEvent entity = baseEntity();
+            InboundEventLog entity = baseEntity();
 
             enricher.enrich(request, entity);
 
@@ -212,29 +207,27 @@ class EventDefaultsEnricherTest {
         @DisplayName("all enriched values set on both entity and request")
         void allValuesSyncedToEntityAndRequest() {
             EventIngestionRequest request = requestWithoutOptionals();
-            InboundEvent entity = baseEntity();
+            InboundEventLog entity = baseEntity();
 
             enricher.enrich(request, entity);
 
             assertThat(entity.getCorrelationId()).isNotNull().startsWith("corr-");
-            assertThat(entity.getEventTime()).isNotNull();
 
             // Request also receives enriched values (for Kafka publishing)
             assertThat(request.getCorrelationid()).isEqualTo(entity.getCorrelationId());
-            assertThat(request.getTime()).isEqualTo(entity.getEventTime().toString());
+            assertThat(request.getTime()).isNotNull();
         }
 
         @Test
         @DisplayName("all preserved values synced to entity")
         void preservedValuesSyncedToEntity() {
             EventIngestionRequest request = requestWithOptionals();
-            InboundEvent entity = baseEntity();
+            InboundEventLog entity = baseEntity();
 
             enricher.enrich(request, entity);
 
             assertThat(entity.getCorrelationId()).isEqualTo("existing-corr-id");
-            assertThat(entity.getEventTime())
-                    .isEqualTo(OffsetDateTime.parse("2026-03-01T10:00:00Z"));
+            assertThat(request.getTime()).isEqualTo("2026-03-01T10:00:00Z");
         }
     }
 }

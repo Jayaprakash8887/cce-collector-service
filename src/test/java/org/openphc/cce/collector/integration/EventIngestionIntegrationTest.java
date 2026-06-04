@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.openphc.cce.collector.api.dto.EventIngestionRequest;
 import org.openphc.cce.collector.api.exception.KafkaPublishException;
-import org.openphc.cce.collector.domain.model.InboundEvent;
+import org.openphc.cce.collector.domain.model.InboundEventLog;
 import org.openphc.cce.collector.domain.model.enums.InboundStatus;
 import org.springframework.http.MediaType;
 
@@ -176,7 +176,7 @@ class EventIngestionIntegrationTest extends AbstractIntegrationTest {
             verify(inboundEventProducer, times(1)).publish(any(EventIngestionRequest.class));
 
             // Verify DB state
-            List<InboundEvent> events = inboundEventRepository.findAll();
+            List<InboundEventLog> events = inboundEventRepository.findAll();
             assertThat(events).hasSize(1);
             assertThat(events.get(0).getStatus()).isEqualTo(InboundStatus.ACCEPTED);
             assertThat(events.get(0).getCloudeventsId()).isEqualTo("evt-001");
@@ -193,7 +193,7 @@ class EventIngestionIntegrationTest extends AbstractIntegrationTest {
 
             verify(inboundEventProducer, times(1)).publish(any(EventIngestionRequest.class));
 
-            List<InboundEvent> events = inboundEventRepository.findAll();
+            List<InboundEventLog> events = inboundEventRepository.findAll();
             assertThat(events).hasSize(1);
             assertThat(events.get(0).getStatus()).isEqualTo(InboundStatus.ACCEPTED);
         }
@@ -209,10 +209,9 @@ class EventIngestionIntegrationTest extends AbstractIntegrationTest {
 
             verify(inboundEventProducer, times(1)).publish(any(EventIngestionRequest.class));
 
-            List<InboundEvent> events = inboundEventRepository.findAll();
+            List<InboundEventLog> events = inboundEventRepository.findAll();
             assertThat(events).hasSize(1);
             assertThat(events.get(0).getStatus()).isEqualTo(InboundStatus.ACCEPTED);
-            assertThat(events.get(0).getDataContentType()).isEqualTo("application/json");
         }
     }
 
@@ -318,7 +317,7 @@ class EventIngestionIntegrationTest extends AbstractIntegrationTest {
             verify(inboundEventProducer, never()).publish(any());
 
             // Verify DB state — event should be REJECTED
-            List<InboundEvent> events = inboundEventRepository.findAll();
+            List<InboundEventLog> events = inboundEventRepository.findAll();
             assertThat(events).hasSize(1);
             assertThat(events.get(0).getStatus()).isEqualTo(InboundStatus.REJECTED);
             assertThat(events.get(0).getRejectionReason()).isEqualTo("INVALID_FHIR");
@@ -345,7 +344,7 @@ class EventIngestionIntegrationTest extends AbstractIntegrationTest {
 
             verify(inboundEventProducer, never()).publish(any());
 
-            List<InboundEvent> events = inboundEventRepository.findAll();
+            List<InboundEventLog> events = inboundEventRepository.findAll();
             assertThat(events).hasSize(1);
             assertThat(events.get(0).getStatus()).isEqualTo(InboundStatus.REJECTED);
             assertThat(events.get(0).getRejectionReason()).isEqualTo("INVALID_JSON");
@@ -372,7 +371,7 @@ class EventIngestionIntegrationTest extends AbstractIntegrationTest {
 
             verify(inboundEventProducer, never()).publish(any());
 
-            List<InboundEvent> events = inboundEventRepository.findAll();
+            List<InboundEventLog> events = inboundEventRepository.findAll();
             assertThat(events).hasSize(1);
             assertThat(events.get(0).getStatus()).isEqualTo(InboundStatus.REJECTED);
             assertThat(events.get(0).getRejectionReason()).isEqualTo("UNSUPPORTED_CONTENT_TYPE");
@@ -513,7 +512,7 @@ class EventIngestionIntegrationTest extends AbstractIntegrationTest {
     class KafkaFailure {
 
         @Test
-        @DisplayName("Kafka publish failure → 500, inbound_event REJECTED")
+        @DisplayName("Kafka publish failure → 500, inbound_event_log REJECTED")
         void kafkaFailure_returns500_eventRejected() throws Exception {
             doThrow(new KafkaPublishException("cce.events.inbound",
                     new RuntimeException("Broker unavailable")))
@@ -527,7 +526,7 @@ class EventIngestionIntegrationTest extends AbstractIntegrationTest {
                     .andExpect(jsonPath("$.error.message").isNotEmpty());
 
             // Verify DB state — event should be REJECTED with KAFKA_PUBLISH_FAILURE
-            List<InboundEvent> events = inboundEventRepository.findAll();
+            List<InboundEventLog> events = inboundEventRepository.findAll();
             assertThat(events).hasSize(1);
             assertThat(events.get(0).getStatus()).isEqualTo(InboundStatus.REJECTED);
             assertThat(events.get(0).getRejectionReason()).isEqualTo("KAFKA_PUBLISH_FAILURE");
@@ -682,17 +681,13 @@ class EventIngestionIntegrationTest extends AbstractIntegrationTest {
                             .content(validFhirEncounterJson()))
                     .andExpect(status().isAccepted());
 
-            List<InboundEvent> events = inboundEventRepository.findAll();
+            List<InboundEventLog> events = inboundEventRepository.findAll();
             assertThat(events).hasSize(1);
 
-            InboundEvent event = events.get(0);
+            InboundEventLog event = events.get(0);
             assertThat(event.getId()).isNotNull();
             assertThat(event.getCloudeventsId()).isEqualTo("evt-001");
             assertThat(event.getSource()).isEqualTo("urn:openhim:test");
-            assertThat(event.getType()).isEqualTo("org.openphc.encounter");
-            assertThat(event.getSubject()).isEqualTo("UPID-12345");
-            assertThat(event.getSpecVersion()).isEqualTo("1.0");
-            assertThat(event.getDataContentType()).isEqualTo("application/fhir+json");
             assertThat(event.getStatus()).isEqualTo(InboundStatus.ACCEPTED);
             assertThat(event.getCorrelationId()).startsWith("corr-");
             assertThat(event.getReceivedAt()).isNotNull();

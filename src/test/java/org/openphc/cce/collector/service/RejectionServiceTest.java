@@ -7,10 +7,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.openphc.cce.collector.domain.model.InboundEvent;
+import org.openphc.cce.collector.domain.model.InboundEventLog;
 import org.openphc.cce.collector.domain.model.enums.InboundStatus;
 import org.openphc.cce.collector.domain.model.enums.RejectionReason;
-import org.openphc.cce.collector.domain.repository.InboundEventRepository;
+import org.openphc.cce.collector.domain.repository.InboundEventLogRepository;
 
 import java.util.UUID;
 
@@ -26,7 +26,7 @@ import static org.mockito.Mockito.when;
 class RejectionServiceTest {
 
     @Mock
-    private InboundEventRepository repository;
+    private InboundEventLogRepository repository;
 
     @InjectMocks
     private RejectionService rejectionService;
@@ -34,7 +34,7 @@ class RejectionServiceTest {
     @Test
     @DisplayName("Sets status to REJECTED on the event")
     void setsStatusToRejected() {
-        InboundEvent event = buildEvent();
+        InboundEventLog event = buildEvent();
         when(repository.save(any())).thenReturn(event);
 
         rejectionService.recordRejection(event, RejectionReason.INVALID_FHIR, "Bad resource");
@@ -45,7 +45,7 @@ class RejectionServiceTest {
     @Test
     @DisplayName("Sets rejection reason as string name of enum")
     void setsRejectionReason() {
-        InboundEvent event = buildEvent();
+        InboundEventLog event = buildEvent();
         when(repository.save(any())).thenReturn(event);
 
         rejectionService.recordRejection(event, RejectionReason.KAFKA_PUBLISH_FAILURE, "timeout");
@@ -56,7 +56,7 @@ class RejectionServiceTest {
     @Test
     @DisplayName("Sets error details on the event")
     void setsErrorDetails() {
-        InboundEvent event = buildEvent();
+        InboundEventLog event = buildEvent();
         when(repository.save(any())).thenReturn(event);
 
         rejectionService.recordRejection(event, RejectionReason.INVALID_JSON, "Empty payload");
@@ -67,12 +67,12 @@ class RejectionServiceTest {
     @Test
     @DisplayName("Persists the updated event via repository")
     void persistsViaRepository() {
-        InboundEvent event = buildEvent();
+        InboundEventLog event = buildEvent();
         when(repository.save(any())).thenReturn(event);
 
         rejectionService.recordRejection(event, RejectionReason.INVALID_ENVELOPE, "missing id");
 
-        ArgumentCaptor<InboundEvent> captor = ArgumentCaptor.forClass(InboundEvent.class);
+        ArgumentCaptor<InboundEventLog> captor = ArgumentCaptor.forClass(InboundEventLog.class);
         verify(repository).save(captor.capture());
         assertThat(captor.getValue()).isSameAs(event);
     }
@@ -81,7 +81,7 @@ class RejectionServiceTest {
     @DisplayName("Handles all rejection reasons correctly")
     void handlesAllRejectionReasons() {
         for (RejectionReason reason : RejectionReason.values()) {
-            InboundEvent event = buildEvent();
+            InboundEventLog event = buildEvent();
             when(repository.save(any())).thenReturn(event);
 
             rejectionService.recordRejection(event, reason, "test");
@@ -91,12 +91,10 @@ class RejectionServiceTest {
         }
     }
 
-    private InboundEvent buildEvent() {
-        InboundEvent event = InboundEvent.builder()
+    private InboundEventLog buildEvent() {
+        InboundEventLog event = InboundEventLog.builder()
                 .cloudeventsId("evt-001")
                 .source("test-source")
-                .type("test.type")
-                .subject("patient-1")
                 .rawPayload("{}")
                 .build();
         event.setId(UUID.randomUUID());

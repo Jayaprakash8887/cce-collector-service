@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
  *
  * <p>Bound to the {@code cce.collector.dedup} prefix in
  * {@code application.yml}. The lookback window defines how far back
- * the service queries the {@code inbound_event} table when checking
+ * the service queries the {@code inbound_event_log} table when checking
  * for duplicates.</p>
  *
  * <pre>

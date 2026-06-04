@@ -18,10 +18,10 @@ import org.openphc.cce.collector.api.exception.DuplicateEventException;
 import org.openphc.cce.collector.api.exception.PayloadValidationException;
 import org.openphc.cce.collector.api.exception.KafkaPublishException;
 import org.openphc.cce.collector.config.KafkaTopicProperties;
-import org.openphc.cce.collector.domain.model.InboundEvent;
+import org.openphc.cce.collector.domain.model.InboundEventLog;
 import org.openphc.cce.collector.domain.model.enums.InboundStatus;
 import org.openphc.cce.collector.domain.model.enums.RejectionReason;
-import org.openphc.cce.collector.domain.repository.InboundEventRepository;
+import org.openphc.cce.collector.domain.repository.InboundEventLogRepository;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -54,7 +54,7 @@ class EventIngestionServiceTest {
 
     @Mock private CloudEventValidator cloudEventValidator;
     @Mock private DeduplicationService deduplicationService;
-    @Mock private InboundEventRepository repository;
+    @Mock private InboundEventLogRepository repository;
     @Mock private EventDefaultsEnricher enricher;
     @Mock private PayloadValidator payloadValidator;
     @Mock private EventPublisher eventPublisher;
@@ -158,8 +158,8 @@ class EventIngestionServiceTest {
      * and return the entity.
      */
     private void stubRepositorySave() {
-        when(repository.save(any(InboundEvent.class))).thenAnswer(invocation -> {
-            InboundEvent event = invocation.getArgument(0);
+        when(repository.save(any(InboundEventLog.class))).thenAnswer(invocation -> {
+            InboundEventLog event = invocation.getArgument(0);
             if (event.getId() == null) {
                 event.setId(EVENT_ID);
             }
@@ -196,8 +196,8 @@ class EventIngestionServiceTest {
 
             // Capture status at the time of each save (same mutable object is saved twice)
             List<InboundStatus> savedStatuses = new ArrayList<>();
-            when(repository.save(any(InboundEvent.class))).thenAnswer(invocation -> {
-                InboundEvent event = invocation.getArgument(0);
+            when(repository.save(any(InboundEventLog.class))).thenAnswer(invocation -> {
+                InboundEventLog event = invocation.getArgument(0);
                 savedStatuses.add(event.getStatus());
                 if (event.getId() == null) {
                     event.setId(EVENT_ID);
@@ -224,10 +224,10 @@ class EventIngestionServiceTest {
                     repository, enricher, payloadValidator, repository, eventPublisher);
             order.verify(cloudEventValidator).validate(request);
             order.verify(deduplicationService).isDuplicate(CLOUD_EVENTS_ID, SOURCE);
-            order.verify(repository).save(any(InboundEvent.class));      // Step 4: persist RECEIVED
-            order.verify(enricher).enrich(eq(request), any(InboundEvent.class));
+            order.verify(repository).save(any(InboundEventLog.class));      // Step 4: persist RECEIVED
+            order.verify(enricher).enrich(eq(request), any(InboundEventLog.class));
             order.verify(payloadValidator).validatePayload(request);
-            order.verify(repository).save(any(InboundEvent.class));      // Step 7: persist ACCEPTED
+            order.verify(repository).save(any(InboundEventLog.class));      // Step 7: persist ACCEPTED
             order.verify(eventPublisher).publish(any(EventIngestionRequest.class));
         }
 
@@ -257,17 +257,12 @@ class EventIngestionServiceTest {
 
             service.ingest(request);
 
-            ArgumentCaptor<InboundEvent> captor = ArgumentCaptor.forClass(InboundEvent.class);
+            ArgumentCaptor<InboundEventLog> captor = ArgumentCaptor.forClass(InboundEventLog.class);
             verify(repository, org.mockito.Mockito.atLeastOnce()).save(captor.capture());
-            InboundEvent saved = captor.getAllValues().get(0);
+            InboundEventLog saved = captor.getAllValues().get(0);
 
             assertThat(saved.getCloudeventsId()).isEqualTo(CLOUD_EVENTS_ID);
             assertThat(saved.getSource()).isEqualTo(SOURCE);
-            assertThat(saved.getType()).isEqualTo(TYPE);
-            assertThat(saved.getSpecVersion()).isEqualTo("1.0");
-            assertThat(saved.getSubject()).isEqualTo(SUBJECT);
-            assertThat(saved.getFacilityId()).isEqualTo("facility-A");
-            assertThat(saved.getSourceEventId()).isEqualTo("src-evt-001");
             assertThat(saved.getRawPayload()).contains("\"resourceType\"");
         }
     }
@@ -300,7 +295,7 @@ class EventIngestionServiceTest {
 
             service.ingest(request);
 
-            ArgumentCaptor<InboundEvent> captor = ArgumentCaptor.forClass(InboundEvent.class);
+            ArgumentCaptor<InboundEventLog> captor = ArgumentCaptor.forClass(InboundEventLog.class);
             verify(repository, org.mockito.Mockito.atLeastOnce()).save(captor.capture());
             assertThat(captor.getAllValues().get(0).getRawPayload()).contains("\"key\"");
         }
@@ -366,7 +361,7 @@ class EventIngestionServiceTest {
         void throwsDuplicateException() {
             EventIngestionRequest request = buildValidFhirRequest();
             UUID existingId = UUID.randomUUID();
-            InboundEvent existing = InboundEvent.builder()
+            InboundEventLog existing = InboundEventLog.builder()
                     .cloudeventsId(CLOUD_EVENTS_ID)
                     .source(SOURCE)
                     .build();
@@ -388,7 +383,7 @@ class EventIngestionServiceTest {
         @DisplayName("Does not persist a new record for duplicates")
         void doesNotPersistDuplicate() {
             EventIngestionRequest request = buildValidFhirRequest();
-            InboundEvent existing = InboundEvent.builder()
+            InboundEventLog existing = InboundEventLog.builder()
                     .cloudeventsId(CLOUD_EVENTS_ID)
                     .source(SOURCE)
                     .build();
@@ -408,7 +403,7 @@ class EventIngestionServiceTest {
         @DisplayName("Does not invoke enrichment or validation for duplicates")
         void doesNotEnrichOrValidateDuplicate() {
             EventIngestionRequest request = buildValidFhirRequest();
-            InboundEvent existing = InboundEvent.builder()
+            InboundEventLog existing = InboundEventLog.builder()
                     .cloudeventsId(CLOUD_EVENTS_ID)
                     .source(SOURCE)
                     .build();
@@ -462,7 +457,7 @@ class EventIngestionServiceTest {
                     .isInstanceOf(PayloadValidationException.class);
 
             verify(rejectionService).recordRejection(
-                    any(InboundEvent.class),
+                    any(InboundEventLog.class),
                     eq(RejectionReason.INVALID_FHIR),
                     eq(fhirEx.getMessage()));
         }
@@ -495,7 +490,7 @@ class EventIngestionServiceTest {
                     .isInstanceOf(PayloadValidationException.class);
 
             // Only one save (Step 4: RECEIVED), no second save (Step 7: ACCEPTED)
-            verify(repository, org.mockito.Mockito.times(1)).save(any(InboundEvent.class));
+            verify(repository, org.mockito.Mockito.times(1)).save(any(InboundEventLog.class));
         }
     }
 
@@ -545,7 +540,7 @@ class EventIngestionServiceTest {
                     .isInstanceOf(KafkaPublishException.class);
 
             verify(rejectionService).recordRejection(
-                    any(InboundEvent.class),
+                    any(InboundEventLog.class),
                     eq(RejectionReason.KAFKA_PUBLISH_FAILURE),
                     any(String.class));
         }
@@ -557,8 +552,8 @@ class EventIngestionServiceTest {
 
             // Track status at each save to verify RECEIVED → ACCEPTED transition
             List<InboundStatus> savedStatuses = new ArrayList<>();
-            when(repository.save(any(InboundEvent.class))).thenAnswer(invocation -> {
-                InboundEvent event = invocation.getArgument(0);
+            when(repository.save(any(InboundEventLog.class))).thenAnswer(invocation -> {
+                InboundEventLog event = invocation.getArgument(0);
                 savedStatuses.add(event.getStatus());
                 if (event.getId() == null) {
                     event.setId(EVENT_ID);
@@ -673,7 +668,7 @@ class EventIngestionServiceTest {
                     .isInstanceOf(PayloadValidationException.class);
 
             verify(rejectionService).recordRejection(
-                    any(InboundEvent.class),
+                    any(InboundEventLog.class),
                     eq(RejectionReason.UNSUPPORTED_CONTENT_TYPE),
                     any(String.class));
         }
@@ -695,7 +690,7 @@ class EventIngestionServiceTest {
 
             // Simulate enrichment setting correlationId on entity
             org.mockito.Mockito.doAnswer(invocation -> {
-                InboundEvent entity = invocation.getArgument(1);
+                InboundEventLog entity = invocation.getArgument(1);
                 entity.setCorrelationId(CORRELATION_ID);
                 return null;
             }).when(enricher).enrich(any(), any());

@@ -1,6 +1,6 @@
 package org.openphc.cce.collector.domain.repository;
 
-import org.openphc.cce.collector.domain.model.InboundEvent;
+import org.openphc.cce.collector.domain.model.InboundEventLog;
 import org.openphc.cce.collector.domain.model.enums.InboundStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -12,13 +12,13 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Spring Data JPA repository for {@link InboundEvent}.
+ * Spring Data JPA repository for {@link InboundEventLog}.
  *
  * <p>All rejected-event queries operate on this single table —
  * no separate dead_letter_event table exists.</p>
  */
 @Repository
-public interface InboundEventRepository extends JpaRepository<InboundEvent, UUID> {
+public interface InboundEventLogRepository extends JpaRepository<InboundEventLog, UUID> {
 
     /**
      * Find an event by its CloudEvents id and source (exact match).
@@ -35,7 +35,7 @@ public interface InboundEventRepository extends JpaRepository<InboundEvent, UUID
      * @param source        the event source
      * @return the matching event, if any
      */
-    Optional<InboundEvent> findByCloudeventsIdAndSource(String cloudeventsId, String source);
+    Optional<InboundEventLog> findByCloudeventsIdAndSource(String cloudeventsId, String source);
 
     /**
      * Check if a duplicate event exists within the lookback window.
@@ -60,7 +60,7 @@ public interface InboundEventRepository extends JpaRepository<InboundEvent, UUID
      * @param pageable pagination parameters
      * @return paginated list of events with the given status
      */
-    Page<InboundEvent> findByStatusOrderByReceivedAtDesc(
+    Page<InboundEventLog> findByStatusOrderByReceivedAtDesc(
             InboundStatus status, Pageable pageable);
 
     /**
