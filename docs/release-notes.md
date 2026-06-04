@@ -56,7 +56,7 @@ First production-ready release of the CCE Collector Service — the single point
 | 5 | **Deduplication** | CCE-56 | Compound key `(cloudevents_id, source)` with configurable lookback window (default 24h); returns idempotent `200 OK` for duplicates |
 | 6 | **Server-Side Defaults** | CCE-81 | Auto-generates `correlationid` (`corr-<UUID>`) and `time` (server `received_at`) if absent |
 | 7 | **Kafka Publishing** | CCE-58 | Synchronous publish to `cce.events.inbound` topic with `subject` as partition key; at-least-once delivery guarantee |
-| 8 | **Rejection Tracking** | CCE-60 | Rejected events recorded on `inbound_event` table with `rejection_reason` and `error_details` (capped at 4000 chars) |
+| 8 | **Rejection Tracking** | CCE-60 | Rejected events recorded on `inbound_event_log` table with `rejection_reason` and `error_details` (capped at 4000 chars) |
 
 #### Observability
 
@@ -71,7 +71,7 @@ First production-ready release of the CCE Collector Service — the single point
 
 | # | Feature | Ticket | Description |
 |---|---------|--------|-------------|
-| 13 | **PostgreSQL Schema** | CCE-49 | `inbound_event` table with UUIDv7 primary keys, Flyway migration `V1__create_inbound_event.sql` |
+| 13 | **PostgreSQL Schema** | CCE-49 | `inbound_event_log` table with UUIDv7 primary keys, Flyway migration `V1__create_inbound_event_log.sql` |
 | 14 | **Docker Compose** | CCE-49 | Collector service container; shared infra (PostgreSQL 16, Kafka 3.7.0 KRaft) managed via `deploy-scripts/docker-compose.yml` on `cce-net` network |
 | 15 | **Profile Configuration** | CCE-63 | `local`, `staging`, `production` profiles with env-var-wrapped values for all tunable settings |
 | 16 | **Graceful Shutdown** | CCE-63 | `server.shutdown: graceful` with 30s drain timeout |
@@ -116,7 +116,7 @@ First production-ready release of the CCE Collector Service — the single point
 
 ### Validation & Rejection Reasons
 
-All rejected events are persisted to `inbound_event` with the appropriate status and reason:
+All rejected events are persisted to `inbound_event_log` with the appropriate status and reason:
 
 | Rejection Reason | HTTP Code | Trigger |
 |-----------------|-----------|---------|
@@ -171,16 +171,15 @@ All rejected events are persisted to `inbound_event` with the appropriate status
 
 ### Database Schema
 
-Single table `inbound_event` with indexes:
+Single table `inbound_event_log` with indexes:
 
 | Index | Columns | Purpose |
 |-------|---------|---------|
-| `uq_inbound_event_id_source` | `(cloudevents_id, source)` | Deduplication (unique constraint) |
-| `idx_inbound_event_dedup` | `(cloudevents_id, source, received_at)` | Dedup lookback queries |
-| `idx_inbound_event_subject` | `subject` | Patient-scoped queries |
-| `idx_inbound_event_source` | `source` | Source-filtered queries |
-| `idx_inbound_event_status` | `status` | Status-based filtering |
-| `idx_inbound_event_received` | `received_at` | Time-range queries |
+| `uq_inbound_event_log_id_source` | `(cloudevents_id, source)` | Deduplication (unique constraint) |
+| `idx_inbound_event_log_dedup` | `(cloudevents_id, source, received_at)` | Dedup lookback queries |
+| `idx_inbound_event_log_source` | `source` | Source-filtered queries |
+| `idx_inbound_event_log_status` | `status` | Status-based filtering |
+| `idx_inbound_event_log_received` | `received_at` | Time-range queries |
 
 ---
 
@@ -252,7 +251,7 @@ N/A — initial release.
 
 ### Migration Notes
 
-1. **Database:** Flyway auto-applies `V1__create_inbound_event.sql` on first startup
+1. **Database:** Flyway auto-applies `V1__create_inbound_event_log.sql` on first startup
 2. **Kafka:** Topic `cce.events.inbound` is auto-created on startup by `KafkaTopicConfig` (25 partitions, RF 1 by default; production profile: RF 3, min-insync-replicas 2)
 3. **Docker:** Start shared infrastructure (`deploy-scripts/docker-compose.yml`) first to create `cce-net` network, then start collector service (`docker compose up -d`)
 

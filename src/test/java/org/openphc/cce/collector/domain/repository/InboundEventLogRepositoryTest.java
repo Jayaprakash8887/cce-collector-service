@@ -4,7 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.openphc.cce.collector.domain.model.InboundEvent;
+import org.openphc.cce.collector.domain.model.InboundEventLog;
 import org.openphc.cce.collector.domain.model.enums.InboundStatus;
 import org.openphc.cce.collector.domain.model.enums.RejectionReason;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,17 +21,17 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Integration tests for {@link InboundEventRepository}.
+ * Integration tests for {@link InboundEventLogRepository}.
  *
  * <p>Uses H2 in-memory database with test profile (ddl-auto: create-drop).
  * Validates all custom query methods, JSONB field persistence, and enum mapping.</p>
  */
 @DataJpaTest
 @ActiveProfiles("test")
-class InboundEventRepositoryTest {
+class InboundEventLogRepositoryTest {
 
     @Autowired
-    private InboundEventRepository repository;
+    private InboundEventLogRepository repository;
 
     @BeforeEach
     void setUp() {
@@ -40,13 +40,10 @@ class InboundEventRepositoryTest {
 
     // ─── Helper ────────────────────────────────────────────────────────
 
-    private InboundEvent buildEvent(String cloudeventsId, String source, InboundStatus status) {
-        return InboundEvent.builder()
+    private InboundEventLog buildEvent(String cloudeventsId, String source, InboundStatus status) {
+        return InboundEventLog.builder()
                 .cloudeventsId(cloudeventsId)
                 .source(source)
-                .type("org.openphc.cce.vitals.observation.v1")
-                .subject("urn:upid:patient-123")
-                .dataContentType("application/fhir+json")
                 .rawPayload("{\"resourceType\":\"Bundle\",\"entry\":[]}")
                 .status(status)
                 .build();
@@ -61,10 +58,10 @@ class InboundEventRepositoryTest {
         @Test
         @DisplayName("returns event when exact id + source match exists")
         void returnsMatchingEvent() {
-            InboundEvent saved = repository.save(
+            InboundEventLog saved = repository.save(
                     buildEvent("evt-001", "urn:source:a", InboundStatus.RECEIVED));
 
-            Optional<InboundEvent> result =
+            Optional<InboundEventLog> result =
                     repository.findByCloudeventsIdAndSource("evt-001", "urn:source:a");
 
             assertThat(result).isPresent();
@@ -76,7 +73,7 @@ class InboundEventRepositoryTest {
         void emptyWhenSourceMismatch() {
             repository.save(buildEvent("evt-001", "urn:source:a", InboundStatus.RECEIVED));
 
-            Optional<InboundEvent> result =
+            Optional<InboundEventLog> result =
                     repository.findByCloudeventsIdAndSource("evt-001", "urn:source:b");
 
             assertThat(result).isEmpty();
@@ -87,7 +84,7 @@ class InboundEventRepositoryTest {
         void emptyWhenIdMismatch() {
             repository.save(buildEvent("evt-001", "urn:source:a", InboundStatus.RECEIVED));
 
-            Optional<InboundEvent> result =
+            Optional<InboundEventLog> result =
                     repository.findByCloudeventsIdAndSource("evt-999", "urn:source:a");
 
             assertThat(result).isEmpty();
@@ -103,7 +100,7 @@ class InboundEventRepositoryTest {
         @Test
         @DisplayName("returns true when event exists after the lookback timestamp")
         void trueWhenWithinWindow() {
-            InboundEvent event = buildEvent("evt-002", "urn:source:a", InboundStatus.RECEIVED);
+            InboundEventLog event = buildEvent("evt-002", "urn:source:a", InboundStatus.RECEIVED);
             event.setReceivedAt(OffsetDateTime.now(ZoneOffset.UTC));
             repository.save(event);
 
@@ -117,7 +114,7 @@ class InboundEventRepositoryTest {
         @Test
         @DisplayName("returns false when event is before the lookback timestamp")
         void falseWhenOutsideWindow() {
-            InboundEvent event = buildEvent("evt-002", "urn:source:a", InboundStatus.RECEIVED);
+            InboundEventLog event = buildEvent("evt-002", "urn:source:a", InboundStatus.RECEIVED);
             event.setReceivedAt(OffsetDateTime.now(ZoneOffset.UTC).minusDays(2));
             repository.save(event);
 
@@ -141,12 +138,12 @@ class InboundEventRepositoryTest {
             OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
 
             // rejected (should be returned)
-            InboundEvent r1 = buildEvent("rej-1", "urn:src:a", InboundStatus.REJECTED);
+            InboundEventLog r1 = buildEvent("rej-1", "urn:src:a", InboundStatus.REJECTED);
             r1.setReceivedAt(now.minusMinutes(10));
             r1.setRejectionReason(RejectionReason.INVALID_FHIR.name());
             repository.save(r1);
 
-            InboundEvent r2 = buildEvent("rej-2", "urn:src:a", InboundStatus.REJECTED);
+            InboundEventLog r2 = buildEvent("rej-2", "urn:src:a", InboundStatus.REJECTED);
             r2.setReceivedAt(now.minusMinutes(5));
             r2.setRejectionReason(RejectionReason.INVALID_JSON.name());
             repository.save(r2);
@@ -154,7 +151,7 @@ class InboundEventRepositoryTest {
             // accepted (should NOT be returned)
             repository.save(buildEvent("acc-1", "urn:src:a", InboundStatus.ACCEPTED));
 
-            Page<InboundEvent> page = repository
+            Page<InboundEventLog> page = repository
                     .findByStatusOrderByReceivedAtDesc(
                             InboundStatus.REJECTED, PageRequest.of(0, 10));
 
@@ -168,7 +165,7 @@ class InboundEventRepositoryTest {
         void emptyWhenNone() {
             repository.save(buildEvent("acc-1", "urn:src:a", InboundStatus.ACCEPTED));
 
-            Page<InboundEvent> page = repository
+            Page<InboundEventLog> page = repository
                     .findByStatusOrderByReceivedAtDesc(
                             InboundStatus.REJECTED, PageRequest.of(0, 10));
 
@@ -209,11 +206,11 @@ class InboundEventRepositoryTest {
             String jsonPayload = "{\"resourceType\":\"Observation\",\"status\":\"final\","
                     + "\"code\":{\"coding\":[{\"system\":\"http://loinc.org\",\"code\":\"85354-9\"}]}}";
 
-            InboundEvent event = buildEvent("json-1", "urn:src:a", InboundStatus.RECEIVED);
+            InboundEventLog event = buildEvent("json-1", "urn:src:a", InboundStatus.RECEIVED);
             event.setRawPayload(jsonPayload);
             repository.save(event);
 
-            InboundEvent loaded = repository.findById(event.getId()).orElseThrow();
+            InboundEventLog loaded = repository.findById(event.getId()).orElseThrow();
             assertThat(loaded.getRawPayload()).isEqualTo(jsonPayload);
         }
 
@@ -222,11 +219,11 @@ class InboundEventRepositoryTest {
         void handlesComplexJson() {
             String complexJson = "{\"entry\":[{\"resource\":{\"text\":\"value with \\\"quotes\\\" and ünïcödë\"}}]}";
 
-            InboundEvent event = buildEvent("json-2", "urn:src:a", InboundStatus.RECEIVED);
+            InboundEventLog event = buildEvent("json-2", "urn:src:a", InboundStatus.RECEIVED);
             event.setRawPayload(complexJson);
             repository.save(event);
 
-            InboundEvent loaded = repository.findById(event.getId()).orElseThrow();
+            InboundEventLog loaded = repository.findById(event.getId()).orElseThrow();
             assertThat(loaded.getRawPayload()).isEqualTo(complexJson);
         }
     }
@@ -240,10 +237,10 @@ class InboundEventRepositoryTest {
         @Test
         @DisplayName("status enum persists as STRING, not ordinal")
         void statusPersistedAsString() {
-            InboundEvent event = buildEvent("enum-1", "urn:src:a", InboundStatus.DUPLICATE);
+            InboundEventLog event = buildEvent("enum-1", "urn:src:a", InboundStatus.DUPLICATE);
             repository.save(event);
 
-            InboundEvent loaded = repository.findById(event.getId()).orElseThrow();
+            InboundEventLog loaded = repository.findById(event.getId()).orElseThrow();
             assertThat(loaded.getStatus()).isEqualTo(InboundStatus.DUPLICATE);
         }
 
@@ -251,10 +248,10 @@ class InboundEventRepositoryTest {
         @DisplayName("all InboundStatus values can be persisted and loaded")
         void allStatusValuesRoundTrip() {
             for (InboundStatus status : InboundStatus.values()) {
-                InboundEvent event = buildEvent("status-" + status.name(), "urn:src:a", status);
+                InboundEventLog event = buildEvent("status-" + status.name(), "urn:src:a", status);
                 repository.save(event);
 
-                InboundEvent loaded = repository.findById(event.getId()).orElseThrow();
+                InboundEventLog loaded = repository.findById(event.getId()).orElseThrow();
                 assertThat(loaded.getStatus()).isEqualTo(status);
             }
         }
@@ -262,11 +259,11 @@ class InboundEventRepositoryTest {
         @Test
         @DisplayName("rejection_reason stored as VARCHAR string")
         void rejectionReasonStoredAsString() {
-            InboundEvent event = buildEvent("reason-1", "urn:src:a", InboundStatus.REJECTED);
+            InboundEventLog event = buildEvent("reason-1", "urn:src:a", InboundStatus.REJECTED);
             event.setRejectionReason(RejectionReason.KAFKA_PUBLISH_FAILURE.name());
             repository.save(event);
 
-            InboundEvent loaded = repository.findById(event.getId()).orElseThrow();
+            InboundEventLog loaded = repository.findById(event.getId()).orElseThrow();
             assertThat(loaded.getRejectionReason()).isEqualTo("KAFKA_PUBLISH_FAILURE");
         }
     }
@@ -280,14 +277,12 @@ class InboundEventRepositoryTest {
         @Test
         @DisplayName("default values are set correctly by builder")
         void defaultsApplied() {
-            InboundEvent event = InboundEvent.builder()
+            InboundEventLog event = InboundEventLog.builder()
                     .cloudeventsId("def-1")
                     .source("urn:src:a")
-                    .type("org.openphc.cce.test")
                     .rawPayload("{}")
                     .build();
 
-            assertThat(event.getSpecVersion()).isEqualTo("1.0");
             assertThat(event.getStatus()).isEqualTo(InboundStatus.RECEIVED);
             assertThat(event.getReceivedAt()).isNotNull();
         }
@@ -302,19 +297,19 @@ class InboundEventRepositoryTest {
         @Test
         @DisplayName("id is generated automatically on persist via @PrePersist")
         void idGeneratedOnPersist() {
-            InboundEvent event = buildEvent("uuid-1", "urn:src:a", InboundStatus.RECEIVED);
+            InboundEventLog event = buildEvent("uuid-1", "urn:src:a", InboundStatus.RECEIVED);
             assertThat(event.getId()).isNull();
 
-            InboundEvent saved = repository.save(event);
+            InboundEventLog saved = repository.save(event);
             assertThat(saved.getId()).isNotNull();
         }
 
         @Test
         @DisplayName("generated ids are time-ordered (monotonically increasing)")
         void idsAreTimeOrdered() throws InterruptedException {
-            InboundEvent e1 = repository.save(buildEvent("uuid-o1", "urn:src:a", InboundStatus.RECEIVED));
+            InboundEventLog e1 = repository.save(buildEvent("uuid-o1", "urn:src:a", InboundStatus.RECEIVED));
             Thread.sleep(2); // ensure different millisecond for UUIDv7 timestamp
-            InboundEvent e2 = repository.save(buildEvent("uuid-o2", "urn:src:b", InboundStatus.RECEIVED));
+            InboundEventLog e2 = repository.save(buildEvent("uuid-o2", "urn:src:b", InboundStatus.RECEIVED));
 
             assertThat(e1.getId()).isLessThan(e2.getId());
         }

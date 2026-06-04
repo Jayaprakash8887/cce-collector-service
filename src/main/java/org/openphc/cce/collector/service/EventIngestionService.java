@@ -11,10 +11,10 @@ import org.openphc.cce.collector.api.exception.DuplicateEventException;
 import org.openphc.cce.collector.api.exception.KafkaPublishException;
 import org.openphc.cce.collector.api.exception.PayloadValidationException;
 import org.openphc.cce.collector.config.KafkaTopicProperties;
-import org.openphc.cce.collector.domain.model.InboundEvent;
+import org.openphc.cce.collector.domain.model.InboundEventLog;
 import org.openphc.cce.collector.domain.model.enums.InboundStatus;
 import org.openphc.cce.collector.domain.model.enums.RejectionReason;
-import org.openphc.cce.collector.domain.repository.InboundEventRepository;
+import org.openphc.cce.collector.domain.repository.InboundEventLogRepository;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -29,14 +29,14 @@ import java.util.List;
  *   <li>Receive HTTP POST → parse request body (handled by Spring MVC)</li>
  *   <li>CloudEvents envelope validation → 400 on failure</li>
  *   <li>Deduplication check → 200 (idempotent) if duplicate</li>
- *   <li>Persist to {@code inbound_event} (status = RECEIVED)</li>
+ *   <li>Persist to {@code inbound_event_log} (status = RECEIVED)</li>
      *   <li>Apply server-side defaults (correlationid, time)</li>
  *   <li>Payload validation (branched by datacontenttype) → 422 on failure</li>
- *   <li>Update {@code inbound_event.status} = ACCEPTED</li>
+ *   <li>Update {@code inbound_event_log.status} = ACCEPTED</li>
  *   <li>Synchronous Kafka publish → 500 on failure</li>
  * </ol>
  *
- * <p>Each failure case updates the {@code inbound_event} record with the
+ * <p>Each failure case updates the {@code inbound_event_log} record with the
  * appropriate {@link RejectionReason} (except envelope failures which occur
  * before persistence).</p>
  *
@@ -51,7 +51,7 @@ public class EventIngestionService {
 
     private final CloudEventValidator cloudEventValidator;
     private final DeduplicationService deduplicationService;
-    private final InboundEventRepository repository;
+    private final InboundEventLogRepository repository;
     private final EventDefaultsEnricher enricher;
     private final PayloadValidator payloadValidator;
     private final EventPublisher eventPublisher;
@@ -69,7 +69,7 @@ public class EventIngestionService {
     public EventIngestionService(
             CloudEventValidator cloudEventValidator,
             DeduplicationService deduplicationService,
-            InboundEventRepository repository,
+            InboundEventLogRepository repository,
             EventDefaultsEnricher enricher,
             PayloadValidator payloadValidator,
             EventPublisher eventPublisher,
@@ -133,7 +133,7 @@ public class EventIngestionService {
         // ── Step 3: Deduplication check ────────────────────────────
         if (deduplicationService.isDuplicate(request.getId(), request.getSource())) {
             duplicateCounter.increment();
-            InboundEvent existing = repository
+            InboundEventLog existing = repository
                     .findByCloudeventsIdAndSource(request.getId(), request.getSource())
                     .orElseThrow(() -> new IllegalStateException(
                             "Duplicate detected but original record not found for cloudeventsId="
@@ -141,8 +141,8 @@ public class EventIngestionService {
             throw new DuplicateEventException(existing.getId(), existing.getId());
         }
 
-        // ── Step 4: Persist to inbound_event (RECEIVED) ───────────
-        InboundEvent inbound = buildInboundEvent(request);
+        // ── Step 4: Persist to inbound_event_log (RECEIVED) ───────────
+        InboundEventLog inbound = buildInboundEvent(request);
         inbound = repository.save(inbound);
         log.info("Event persisted: id={}, cloudeventsId={}, status=RECEIVED",
                 inbound.getId(), inbound.getCloudeventsId());
@@ -224,7 +224,7 @@ public class EventIngestionService {
      * Attempt to record a rejection, swallowing any exception so the original
      * failure is never masked by a secondary DB error.
      */
-    private void safeRecordRejection(InboundEvent event, RejectionReason reason, String details) {
+    private void safeRecordRejection(InboundEventLog event, RejectionReason reason, String details) {
         try {
             rejectionService.recordRejection(event, reason, details);
         } catch (Exception suppressed) {
@@ -260,31 +260,25 @@ public class EventIngestionService {
     }
 
     /**
-     * Build an {@link InboundEvent} entity from the request.
+     * Build an {@link InboundEventLog} entity from the request.
      *
      * <p>Uses builder defaults for {@code specVersion}, {@code status} (RECEIVED),
      * and {@code receivedAt} (now). Fields managed by {@link EventDefaultsEnricher}
      * (correlationId, eventTime) are set during Step 5. The {@code dataContentType}
      * is set directly from the request (required field).</p>
      */
-    private InboundEvent buildInboundEvent(EventIngestionRequest request) {
-        return InboundEvent.builder()
+    private InboundEventLog buildInboundEvent(EventIngestionRequest request) {
+        return InboundEventLog.builder()
                 .cloudeventsId(request.getId())
                 .source(request.getSource())
-                .type(request.getType())
-                .specVersion(request.getSpecversion())
-                .subject(request.getSubject())
                 .rawPayload(request.getData().toString())
-                .facilityId(request.getFacilityid())
-                .sourceEventId(request.getSourceeventid())
-                .dataContentType(request.getDatacontenttype())
                 .build();
     }
 
     /**
      * Build the success response DTO from the persisted entity.
      */
-    private EventIngestionResponse buildResponse(InboundEvent inbound) {
+    private EventIngestionResponse buildResponse(InboundEventLog inbound) {
         return EventIngestionResponse.builder()
                 .eventId(inbound.getId().toString())
                 .cloudEventsId(inbound.getCloudeventsId())

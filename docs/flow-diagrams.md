@@ -10,27 +10,27 @@ Visual diagrams of the Collector Service's processing flows using Mermaid.
 flowchart TD
     A[HTTP POST /v1/events] --> B{CloudEvents<br/>Envelope Valid?}
     B -->|No| C[400 Bad Request]
-    C --> C1[Update inbound_event<br/>status: REJECTED<br/>reason: INVALID_ENVELOPE]
+    C --> C1[Update inbound_event_log<br/>status: REJECTED<br/>reason: INVALID_ENVELOPE]
     B -->|Yes| D{Duplicate?<br/>source + id in<br/>lookback window}
     D -->|Yes| E[200 OK<br/>status: duplicate]
-    D -->|No| F[Persist to<br/>inbound_event<br/>status: RECEIVED]
+    D -->|No| F[Persist to<br/>inbound_event_log<br/>status: RECEIVED]
     F --> G2[Apply Defaults<br/>• generate correlationId if absent<br/>• fill time if absent]
     G2 --> H0{datacontenttype?}
     H0 -->|application/fhir+json<br/>or absent| H{FHIR Payload<br/>Valid?}
     H0 -->|application/json| H3{Valid JSON<br/>Object?}
     H0 -->|other| H4[400 Bad Request]
-    H4 --> H4a[Update inbound_event<br/>status: REJECTED<br/>reason: UNSUPPORTED_CONTENT_TYPE]
+    H4 --> H4a[Update inbound_event_log<br/>status: REJECTED<br/>reason: UNSUPPORTED_CONTENT_TYPE]
     H3 -->|No| H3a[422 Unprocessable]
-    H3a --> H3b[Update inbound_event<br/>status: REJECTED]
-    H3b --> H3c[Update inbound_event<br/>status: REJECTED<br/>reason: INVALID_JSON]
-    H3 -->|Yes| J[Update inbound_event<br/>status: ACCEPTED]
+    H3a --> H3b[Update inbound_event_log<br/>status: REJECTED]
+    H3b --> H3c[Update inbound_event_log<br/>status: REJECTED<br/>reason: INVALID_JSON]
+    H3 -->|Yes| J[Update inbound_event_log<br/>status: ACCEPTED]
     H -->|No| I[422 Unprocessable]
-    I --> I1[Update inbound_event<br/>status: REJECTED]
-    I1 --> I2[Update inbound_event<br/>status: REJECTED<br/>reason: INVALID_FHIR]
-    H -->|Yes| J[Update inbound_event<br/>status: ACCEPTED]
+    I --> I1[Update inbound_event_log<br/>status: REJECTED]
+    I1 --> I2[Update inbound_event_log<br/>status: REJECTED<br/>reason: INVALID_FHIR]
+    H -->|Yes| J[Update inbound_event_log<br/>status: ACCEPTED]
     J --> K{Kafka Publish<br/>Successful?}
     K -->|Yes| L[202 Accepted<br/>Ingestion Receipt]
-    K -->|No| M[Update inbound_event<br/>status: REJECTED<br/>reason: KAFKA_PUBLISH_FAILURE]
+    K -->|No| M[Update inbound_event_log<br/>status: REJECTED<br/>reason: KAFKA_PUBLISH_FAILURE]
     M --> N[500 Internal Server Error]
 
     style A fill:#4a90d9,color:#fff
@@ -58,7 +58,7 @@ sequenceDiagram
     participant Service as EventIngestionService
     participant Validator as CloudEventValidator
     participant Dedup as DeduplicationService
-    participant Repo as InboundEventRepository
+    participant Repo as InboundEventLogRepository
     participant Defaults as EventDefaultsEnricher
     participant PV as PayloadValidator
     participant Kafka as Kafka Broker
@@ -102,7 +102,7 @@ sequenceDiagram
     participant Service as EventIngestionService
     participant Validator as CloudEventValidator
     participant Dedup as DeduplicationService
-    participant Repo as InboundEventRepository
+    participant Repo as InboundEventLogRepository
     participant Defaults as EventDefaultsEnricher
     participant PV as PayloadValidator
     participant RS as RejectionService
@@ -146,7 +146,7 @@ sequenceDiagram
     Validator-->>Service: ✓ valid
 
     Service->>Dedup: isDuplicate(source, id)
-    Note over Dedup: Query inbound_event WHERE<br/>cloudevents_id = ? AND source = ?<br/>AND received_at > now() - lookback
+    Note over Dedup: Query inbound_event_log WHERE<br/>cloudevents_id = ? AND source = ?<br/>AND received_at > now() - lookback
     Dedup-->>Service: true (DuplicateEventException)
 
     Service-->>Controller: throw DuplicateEventException
@@ -174,7 +174,7 @@ flowchart LR
     subgraph CCE["CCE Platform"]
         GW[CCE Gateway<br/>auth + routing]
         CS[Collector Service<br/>validate → dedup<br/>→ publish]
-        PG[(PostgreSQL<br/>inbound_event)]
+        PG[(PostgreSQL<br/>inbound_event_log)]
         KF[Kafka<br/>cce.events.inbound]
         COMP[Compliance Service]
     end
@@ -200,12 +200,11 @@ flowchart LR
 
 ```mermaid
 erDiagram
-    inbound_event {
+    inbound_event_log {
         UUID id PK
         VARCHAR cloudevents_id
         VARCHAR source
-        VARCHAR type
-        VARCHAR subject
+        VARCHAR correlation_id
         JSONB raw_payload
         VARCHAR status
         VARCHAR rejection_reason

@@ -2,14 +2,14 @@ package org.openphc.cce.collector.service;
 
 import lombok.extern.slf4j.Slf4j;
 import org.openphc.cce.collector.api.dto.EventIngestionRequest;
-import org.openphc.cce.collector.domain.model.InboundEvent;
+import org.openphc.cce.collector.domain.model.InboundEventLog;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /**
- * Enriches <strong>both</strong> the {@link InboundEvent} entity and the
+ * Enriches <strong>both</strong> the {@link InboundEventLog} entity and the
  * {@link EventIngestionRequest} DTO with server-side defaults for optional
  * fields.
  *
@@ -18,7 +18,7 @@ import java.util.UUID;
  *
  * <ol>
  *   <li>{@code correlationId / correlationid} — generated as {@code "corr-" + UUID} if absent</li>
- *   <li>{@code eventTime / time} — filled with the server's {@code receivedAt} timestamp if absent</li>
+ *   <li>{@code time} — filled with the server's {@code receivedAt} timestamp if absent (on request DTO only, for Kafka publishing)</li>
  * </ol>
  *
  * <p>The request DTO is also updated so that when it is published to Kafka
@@ -44,7 +44,7 @@ public class EventDefaultsEnricher {
      * @param request the inbound event request (mutated with defaults)
      * @param inbound the JPA entity to enrich for persistence
      */
-    public void enrich(EventIngestionRequest request, InboundEvent inbound) {
+    public void enrich(EventIngestionRequest request, InboundEventLog inbound) {
         enrichCorrelationId(request, inbound);
         enrichTime(request, inbound);
     }
@@ -53,7 +53,7 @@ public class EventDefaultsEnricher {
      * Generate a correlation ID if absent: {@code "corr-" + UUID}.
      * Sets the value on both entity and request.
      */
-    private void enrichCorrelationId(EventIngestionRequest request, InboundEvent inbound) {
+    private void enrichCorrelationId(EventIngestionRequest request, InboundEventLog inbound) {
         if (isBlank(request.getCorrelationid())) {
             String generated = CORRELATION_ID_PREFIX + UUID.randomUUID();
             inbound.setCorrelationId(generated);
@@ -65,17 +65,14 @@ public class EventDefaultsEnricher {
     }
 
     /**
-     * Fill {@code eventTime / time} with the server's {@code receivedAt} if absent.
-     * Sets the value on both entity and request.
+     * Fill {@code time} on the request DTO with the server's {@code receivedAt} if absent.
+     * Only enriches the request (for Kafka publishing) — no entity field to set.
      */
-    private void enrichTime(EventIngestionRequest request, InboundEvent inbound) {
+    private void enrichTime(EventIngestionRequest request, InboundEventLog inbound) {
         if (isBlank(request.getTime())) {
             OffsetDateTime receivedAt = inbound.getReceivedAt();
-            inbound.setEventTime(receivedAt);
             request.setTime(receivedAt.toString());
-            log.debug("Filled eventTime from server receivedAt: {}", receivedAt);
-        } else {
-            inbound.setEventTime(OffsetDateTime.parse(request.getTime()));
+            log.debug("Filled time from server receivedAt: {}", receivedAt);
         }
     }
 

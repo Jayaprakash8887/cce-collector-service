@@ -57,3 +57,5 @@ replay_pid*
 
 
 artifacts/
+
+.github/copilot-instructions-collector-service.md

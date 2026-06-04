@@ -10,7 +10,7 @@ import java.util.List;
  *
  * <p>Carries a list of validation errors and the applicable
  * {@link RejectionReason} so the orchestrator (C9) can persist the
- * correct rejection status on the {@code inbound_event} record.</p>
+ * correct rejection status on the {@code inbound_event_log} record.</p>
  */
 @Getter
 public class PayloadValidationException extends RuntimeException {

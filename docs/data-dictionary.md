@@ -6,26 +6,19 @@ Consolidated reference for all database tables, columns, enums, CloudEvents fiel
 
 ## 1. Database Tables
 
-### 1.1 `inbound_event` — Request Audit Log & Rejection Tracking
+### 1.1 `inbound_event_log` — Request Audit Log & Rejection Tracking
 
-Every HTTP request is persisted **as-is** before processing. Used for audit trail, primary deduplication, and rejection tracking. Rejected events are recorded directly on this table.
+Every HTTP request is persisted **as-is** before processing. Used for audit trail, primary deduplication, and rejection tracking. Rejected events are recorded directly on this table. The full CloudEvents payload is stored in `raw_payload` (JSONB) — individual CloudEvents fields are not denormalized into separate columns.
 
-**Migration:** `V1__create_inbound_event.sql`
+**Migration:** `V1__create_inbound_event_log.sql`
 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | `id` | `UUID` | No | — | Primary key (UUIDv7, application-generated, time-ordered) |
 | `cloudevents_id` | `VARCHAR(50)` | No | — | CloudEvents `id` from the source system |
 | `source` | `VARCHAR(100)` | No | — | CloudEvents `source` (e.g., `rhie-mediator`, `ebuzima/kigali-south`) |
-| `type` | `VARCHAR(100)` | No | — | CloudEvents `type` as received from emitter adaptor |
-| `spec_version` | `VARCHAR(10)` | No | `'1.0'` | CloudEvents spec version |
-| `subject` | `VARCHAR(100)` | Yes | — | Patient UPID (e.g., `260225-0002-5501`) |
-| `event_time` | `TIMESTAMPTZ` | Yes | — | Source-provided event time |
-| `data_content_type` | `VARCHAR(50)` | No | — | MIME type of `data` payload |
-| `facility_id` | `VARCHAR(100)` | Yes | — | Healthcare facility FOSA ID |
 | `correlation_id` | `VARCHAR(100)` | Yes | — | Distributed tracing ID |
-| `source_event_id` | `VARCHAR(100)` | Yes | — | Source system's internal event ID |
-| `raw_payload` | `JSONB` | No | — | Full original request body (immutable) |
+| `raw_payload` | `JSONB` | No | — | Full original request body (immutable) — contains all CloudEvents fields |
 | `status` | `VARCHAR(20)` | No | `'RECEIVED'` | Processing status (see `InboundStatus` enum) |
 | `rejection_reason` | `VARCHAR(50)` | Yes | — | Rejection reason code (if status = `REJECTED`; see `RejectionReason` enum) |
 | `error_details` | `TEXT` | Yes | — | Stack trace or validation error messages |
@@ -38,12 +31,11 @@ Every HTTP request is persisted **as-is** before processing. Used for audit trai
 **Indexes:**
 | Index | Columns | Purpose |
 |-------|---------|---------|
-| `uq_inbound_event_id_source` | `(cloudevents_id, source)` | Deduplication (unique constraint) |
-| `idx_inbound_event_dedup` | `(cloudevents_id, source, received_at)` | Dedup lookback query — covers `existsBy...ReceivedAtAfter` (index-only scan) |
-| `idx_inbound_event_subject` | `subject` | Patient-scoped queries |
-| `idx_inbound_event_source` | `source` | Source-filtered queries |
-| `idx_inbound_event_status` | `status` | Status-based filtering and `countByStatus` queries |
-| `idx_inbound_event_received` | `received_at` | Time-range queries |
+| `uq_inbound_event_log_id_source` | `(cloudevents_id, source)` | Deduplication (unique constraint) |
+| `idx_inbound_event_log_dedup` | `(cloudevents_id, source, received_at)` | Dedup lookback query — covers `existsBy...ReceivedAtAfter` (index-only scan) |
+| `idx_inbound_event_log_source` | `source` | Source-filtered queries |
+| `idx_inbound_event_log_status` | `status` | Status-based filtering and `countByStatus` queries |
+| `idx_inbound_event_log_received` | `received_at` | Time-range queries |
 
 
 ---
@@ -52,7 +44,7 @@ Every HTTP request is persisted **as-is** before processing. Used for audit trai
 
 ### 2.1 `InboundStatus`
 
-Status of an `inbound_event` record as it moves through the pipeline.
+Status of an `inbound_event_log` record as it moves through the pipeline.
 
 | Value | Description |
 |-------|-------------|
@@ -63,7 +55,7 @@ Status of an `inbound_event` record as it moves through the pipeline.
 
 ### 2.2 `RejectionReason`
 
-Reason an event was rejected (stored on `inbound_event.rejection_reason`).
+Reason an event was rejected (stored on `inbound_event_log.rejection_reason`).
 
 | Value | Description |
 |-------|-------------|
@@ -117,47 +109,47 @@ Inbound requests use **lowercase** field names per the CloudEvents v1.0 specific
 
 ## 4. Kafka Message Fields
 
-Published to `cce.events.inbound` using **CloudEvents spec field names (lowercase)** — no field name translation is performed by the Collector.
+Published to `cce.events.inbound` using **CloudEvents spec field names (lowercase)** — no field name translation is performed by the Collector. The Kafka message is the `EventIngestionRequest` DTO (enriched with server-side defaults), not the database entity.
 
 | Field | Type | Nullable | Source |
 |-------|------|----------|--------|
-| `id` | `String` | No | `inbound_event.cloudevents_id` |
-| `source` | `String` | No | `inbound_event.source` |
-| `type` | `String` | No | `inbound_event.type` (validated) |
+| `id` | `String` | No | Request `id` (CloudEvents id) |
+| `source` | `String` | No | Request `source` |
+| `type` | `String` | No | Request `type` (validated, passed through unchanged) |
 | `specversion` | `String` | No | Always `"1.0"` |
-| `subject` | `String` | No | `inbound_event.subject` — also the Kafka message key |
-| `time` | `OffsetDateTime` | No | `inbound_event.event_time` |
-| `datacontenttype` | `String` | No | `inbound_event.data_content_type` |
-| `correlationid` | `String` | No | `inbound_event.correlation_id` |
-| `sourceeventid` | `String` | Yes | `inbound_event.source_event_id` |
+| `subject` | `String` | No | Request `subject` — also the Kafka message key |
+| `time` | `String` | No | Request `time` (enriched from server `receivedAt` if absent) |
+| `datacontenttype` | `String` | No | Request `datacontenttype` |
+| `correlationid` | `String` | No | Request `correlationid` (enriched as `corr-<uuid>` if absent) |
+| `sourceeventid` | `String` | Yes | Request `sourceeventid` |
 | `protocolinstanceid` | `String` | Yes | (usually null — Compliance Service resolves) |
 | `protocoldefinitionid` | `String` | Yes | (usually null — Compliance Service resolves) |
 | `actionid` | `String` | Yes | (usually null — Compliance Service resolves) |
-| `facilityid` | `String` | Yes | `inbound_event.facility_id` |
-| `data` | `JsonNode` | No | `inbound_event.raw_payload` (FHIR R4 resource or JSON object) |
+| `facilityid` | `String` | Yes | Request `facilityid` |
+| `data` | `JsonNode` | No | Request `data` (FHIR R4 resource or JSON object) |
 
 ---
 
 ## 5. Field Name Reference (HTTP → Database)
 
-The Collector preserves CloudEvents lowercase field names end-to-end (HTTP → Kafka). The database uses `snake_case` column names.
+The Collector preserves CloudEvents lowercase field names end-to-end (HTTP → Kafka). The database stores only a minimal set of columns for deduplication and audit purposes; the full request is in `raw_payload` (JSONB).
 
-| HTTP / Kafka Field (lowercase) | Database Column |
-|-------------------------------|----------------|
-| `specversion` | `spec_version` |
-| `id` | `cloudevents_id` |
-| `source` | `source` |
-| `type` | `type` |
-| `subject` | `subject` |
-| `time` | `event_time` |
-| `datacontenttype` | `data_content_type` |
-| `facilityid` | `facility_id` |
-| `correlationid` | `correlation_id` |
-| `sourceeventid` | `source_event_id` |
-| `protocolinstanceid` | `protocol_instance_id` |
-| `protocoldefinitionid` | `protocol_definition_id` |
-| `actionid` | `action_id` |
-| `data` | `data` / `raw_payload` |
+| HTTP / Kafka Field (lowercase) | Database Column | Stored in DB? |
+|-------------------------------|----------------|---------------|
+| `id` | `cloudevents_id` | Yes |
+| `source` | `source` | Yes |
+| `correlationid` | `correlation_id` | Yes |
+| `data` | `raw_payload` | Yes (full request body) |
+| `specversion` | — | No (in `raw_payload`) |
+| `type` | — | No (in `raw_payload`) |
+| `subject` | — | No (in `raw_payload`) |
+| `time` | — | No (in `raw_payload`) |
+| `datacontenttype` | — | No (in `raw_payload`) |
+| `facilityid` | — | No (in `raw_payload`) |
+| `sourceeventid` | — | No (in `raw_payload`) |
+| `protocolinstanceid` | — | No (in `raw_payload`) |
+| `protocoldefinitionid` | — | No (in `raw_payload`) |
+| `actionid` | — | No (in `raw_payload`) |
 
 ---
 
@@ -199,4 +191,4 @@ The Collector accepts any valid FHIR R4 resource when `datacontenttype` is `appl
 
 | Version | File | Description |
 |---------|------|-------------|
-| V1 | `V1__create_inbound_event.sql` | `inbound_event` table with dedup constraint + rejection tracking columns |
+| V1 | `V1__create_inbound_event_log.sql` | `inbound_event_log` table with dedup constraint + rejection tracking columns |

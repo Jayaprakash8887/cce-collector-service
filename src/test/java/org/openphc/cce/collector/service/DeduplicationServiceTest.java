@@ -9,7 +9,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.openphc.cce.collector.config.DeduplicationProperties;
-import org.openphc.cce.collector.domain.repository.InboundEventRepository;
+import org.openphc.cce.collector.domain.repository.InboundEventLogRepository;
 
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
@@ -24,7 +24,7 @@ import static org.mockito.Mockito.when;
 /**
  * Unit tests for {@link DeduplicationService}.
  *
- * <p>Uses a mocked {@link InboundEventRepository} to verify deduplication
+ * <p>Uses a mocked {@link InboundEventLogRepository} to verify deduplication
  * logic without requiring a database. Covers the four scenarios defined
  * in Sub-Task C7:</p>
  * <ol>
@@ -38,7 +38,7 @@ import static org.mockito.Mockito.when;
 class DeduplicationServiceTest {
 
     @Mock
-    private InboundEventRepository repository;
+    private InboundEventLogRepository repository;
 
     private DeduplicationProperties properties;
     private DeduplicationService service;

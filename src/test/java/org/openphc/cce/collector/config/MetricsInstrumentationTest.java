@@ -17,10 +17,10 @@ import org.openphc.cce.collector.api.exception.DuplicateEventException;
 import org.openphc.cce.collector.api.exception.KafkaPublishException;
 import org.openphc.cce.collector.config.KafkaTopicProperties;
 import org.openphc.cce.collector.api.exception.PayloadValidationException;
-import org.openphc.cce.collector.domain.model.InboundEvent;
+import org.openphc.cce.collector.domain.model.InboundEventLog;
 import org.openphc.cce.collector.domain.model.enums.InboundStatus;
 import org.openphc.cce.collector.domain.model.enums.RejectionReason;
-import org.openphc.cce.collector.domain.repository.InboundEventRepository;
+import org.openphc.cce.collector.domain.repository.InboundEventLogRepository;
 import org.openphc.cce.collector.service.CloudEventValidator;
 import org.openphc.cce.collector.service.DeduplicationService;
 import org.openphc.cce.collector.service.EventDefaultsEnricher;
@@ -53,7 +53,7 @@ class MetricsInstrumentationTest {
 
     @Mock private CloudEventValidator cloudEventValidator;
     @Mock private DeduplicationService deduplicationService;
-    @Mock private InboundEventRepository repository;
+    @Mock private InboundEventLogRepository repository;
     @Mock private EventDefaultsEnricher enricher;
     @Mock private PayloadValidator payloadValidator;
     @Mock private EventPublisher eventPublisher;
@@ -90,15 +90,11 @@ class MetricsInstrumentationTest {
                 .build();
     }
 
-    private InboundEvent buildPersistedEvent() {
-        return InboundEvent.builder()
+    private InboundEventLog buildPersistedEvent() {
+        return InboundEventLog.builder()
                 .id(EVENT_ID)
                 .cloudeventsId("evt-001")
                 .source("rhie-mediator")
-                .type("org.openphc.encounter.created")
-                .specVersion("1.0")
-                .subject("UPID-12345")
-                .dataContentType("application/fhir+json")
                 .rawPayload("{\"resourceType\":\"Encounter\"}")
                 .status(InboundStatus.RECEIVED)
                 .receivedAt(OffsetDateTime.now())
@@ -116,7 +112,7 @@ class MetricsInstrumentationTest {
         @Test
         @DisplayName("increments on each ingest call")
         void incrementsOnIngest() {
-            InboundEvent persisted = buildPersistedEvent();
+            InboundEventLog persisted = buildPersistedEvent();
             when(repository.save(any())).thenReturn(persisted);
 
             service.ingest(buildRequest());
@@ -152,7 +148,7 @@ class MetricsInstrumentationTest {
         @Test
         @DisplayName("increments on successful ingestion")
         void incrementsOnSuccess() {
-            InboundEvent persisted = buildPersistedEvent();
+            InboundEventLog persisted = buildPersistedEvent();
             when(repository.save(any())).thenReturn(persisted);
 
             service.ingest(buildRequest());
@@ -165,7 +161,7 @@ class MetricsInstrumentationTest {
         @Test
         @DisplayName("not incremented when Kafka publish fails")
         void notIncrementedOnKafkaFailure() {
-            InboundEvent persisted = buildPersistedEvent();
+            InboundEventLog persisted = buildPersistedEvent();
             when(repository.save(any())).thenReturn(persisted);
             doThrow(new KafkaPublishException("cce.events.inbound", new RuntimeException("fail")))
                     .when(eventPublisher).publish(any());
@@ -215,7 +211,7 @@ class MetricsInstrumentationTest {
         @Test
         @DisplayName("increments with INVALID_FHIR reason on payload failure")
         void incrementsOnPayloadFailure() {
-            InboundEvent persisted = buildPersistedEvent();
+            InboundEventLog persisted = buildPersistedEvent();
             when(repository.save(any())).thenReturn(persisted);
             when(payloadValidator.validatePayload(any()))
                     .thenThrow(new PayloadValidationException(
@@ -233,7 +229,7 @@ class MetricsInstrumentationTest {
         @Test
         @DisplayName("increments with KAFKA_PUBLISH_FAILURE reason on Kafka failure")
         void incrementsOnKafkaFailure() {
-            InboundEvent persisted = buildPersistedEvent();
+            InboundEventLog persisted = buildPersistedEvent();
             when(repository.save(any())).thenReturn(persisted);
             doThrow(new KafkaPublishException("cce.events.inbound", new RuntimeException("fail")))
                     .when(eventPublisher).publish(any());
@@ -259,7 +255,7 @@ class MetricsInstrumentationTest {
         @Test
         @DisplayName("records duration on successful ingestion")
         void recordsDuration() {
-            InboundEvent persisted = buildPersistedEvent();
+            InboundEventLog persisted = buildPersistedEvent();
             when(repository.save(any())).thenReturn(persisted);
 
             service.ingest(buildRequest());

@@ -22,7 +22,7 @@ import java.time.OffsetDateTime;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class EventIngestionResponse {
 
-    /** UUIDv7 primary key of the persisted {@code inbound_event} record. */
+    /** UUIDv7 primary key of the persisted {@code inbound_event_log} record. */
     private String eventId;
 
     /** Original CloudEvents {@code id} from the source system. */

@@ -21,7 +21,7 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /**
- * JPA entity mapped to the {@code inbound_event} table.
+ * JPA entity mapped to the {@code inbound_event_log} table.
  *
  * <p>Single-table design: this is the only table owned by the Collector Service.
  * No FK references to other tables exist. Rejected events are tracked directly
@@ -29,13 +29,13 @@ import java.util.UUID;
  * {@code errorDetails}.</p>
  */
 @Entity
-@Table(name = "inbound_event")
+@Table(name = "inbound_event_log")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class InboundEvent {
+public class InboundEventLog {
 
     @Id
     @Column(name = "id", updatable = false, nullable = false)
@@ -47,30 +47,8 @@ public class InboundEvent {
     @Column(name = "source", nullable = false, length = 100)
     private String source;
 
-    @Column(name = "type", nullable = false, length = 100)
-    private String type;
-
-    @Column(name = "spec_version", nullable = false, length = 10)
-    @Builder.Default
-    private String specVersion = "1.0";
-
-    @Column(name = "subject", length = 100)
-    private String subject;
-
-    @Column(name = "event_time")
-    private OffsetDateTime eventTime;
-
-    @Column(name = "data_content_type", nullable = false, length = 50)
-    private String dataContentType;
-
-    @Column(name = "facility_id", length = 100)
-    private String facilityId;
-
     @Column(name = "correlation_id", length = 100)
     private String correlationId;
-
-    @Column(name = "source_event_id", length = 100)
-    private String sourceEventId;
 
     @Column(name = "raw_payload", nullable = false, columnDefinition = "jsonb")
     @JdbcTypeCode(SqlTypes.JSON)

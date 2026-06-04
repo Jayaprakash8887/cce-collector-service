@@ -17,7 +17,7 @@ It receives clinical events from external EHR/RHIE systems (via openHIM mediator
 | 5 | **Apply server-side defaults** | Generate `correlationid` (UUID with `corr-` prefix) if absent; fill `time` with server `received_at` if absent |
 | 6 | **Deduplicate inbound events** | Reject/mark duplicates using `(id, source)` compound key via PostgreSQL with configurable lookback window |
 | 7 | **Publish to Kafka** | Topic `cce.events.inbound` with `subject` (patient_id) as partition key |
-| 8 | **Record rejection details** | Persist rejection reason and error details on `inbound_event` for rejected events |
+| 8 | **Record rejection details** | Persist rejection reason and error details on `inbound_event_log` for rejected events |
 | 9 | **Health/readiness endpoints** | For Kubernetes orchestration |
 
 ### Explicit Exclusions
@@ -90,12 +90,12 @@ org.openphc.cce.collector/
 │   └── RequestLoggingFilter.java          #   OncePerRequestFilter: sets MDC requestId per request
 ├── domain/
 │   ├── model/                             # JPA entities
-│   │   ├── InboundEvent.java              #   Raw inbound request record (audit/dedup/rejection tracking)
+│   │   ├── InboundEventLog.java              #   Raw inbound request record (audit/dedup/rejection tracking)
 │   │   └── enums/
 │   │       ├── InboundStatus.java         #   RECEIVED, ACCEPTED, REJECTED, DUPLICATE
 │   │       └── RejectionReason.java       #   Validation/processing failure reasons
 │   └── repository/                        # Spring Data JPA repositories
-│       └── InboundEventRepository.java
+│       └── InboundEventLogRepository.java
 ├── service/                               # Core business logic
 │   ├── EventIngestionService.java         #   Main orchestrator: validate → persist → publish
 │   ├── CloudEventValidator.java           #   CloudEvents v1.0 envelope validation
@@ -103,7 +103,7 @@ org.openphc.cce.collector/
 │   ├── EventDefaultsEnricher.java         #   Generates correlationId if absent, fills time if absent
 │   ├── EventPublisher.java                #   Publishes enriched EventIngestionRequest to Kafka
 │   ├── DeduplicationService.java          #   DB dedup with configurable lookback window
-│   └── RejectionService.java              #   Updates inbound_event with rejection details
+│   └── RejectionService.java              #   Updates inbound_event_log with rejection details
 ├── kafka/
 │   └── InboundEventProducer.java          # Kafka publish to cce.events.inbound
 ├── api/
@@ -145,12 +145,12 @@ src/main/resources/
     a. Required fields: specversion, id, source, type, subject, data
     b. specversion must be "1.0"
     c. subject must be non-empty (patient UPID required by CCE)
-    d. If validation fails → 400 + update inbound_event status = 'REJECTED' with rejection details
+    d. If validation fails → 400 + update inbound_event_log status = 'REJECTED' with rejection details
  3. Deduplication Check
     a. Query PostgreSQL: check if (source, cloudevents_id) exists within lookback window
        - If exists → update status = 'DUPLICATE', return 200 (idempotent)
     b. If not found → proceed (DB unique constraint is authoritative)
- 4. Persist to inbound_event (status = 'RECEIVED', raw_payload = original body)
+ 4. Persist to inbound_event_log (status = 'RECEIVED', raw_payload = original body)
  5. Apply Server-Side Defaults
     a. Generate correlationid if absent (UUID with "corr-" prefix)
     b. Fill time with server received_at if absent
@@ -169,11 +169,11 @@ src/main/resources/
        ii.  If invalid → status = 'REJECTED', rejection_reason = INVALID_JSON, return 422
        iii. No FHIR-specific validation is performed
     c. Other datacontenttype values → status = 'REJECTED', rejection_reason = UNSUPPORTED_CONTENT_TYPE, return 400
- 8. Update inbound_event.status = 'ACCEPTED'
+ 8. Update inbound_event_log.status = 'ACCEPTED'
  9. Publish to Kafka synchronously
     a. Key = subject (patient_id) — per-patient ordering
     b. On success: return HTTP 202 Accepted with ingestion receipt
-    c. On failure: update inbound_event status = 'REJECTED', rejection_reason = KAFKA_PUBLISH_FAILURE, return HTTP 500
+    c. On failure: update inbound_event_log status = 'REJECTED', rejection_reason = KAFKA_PUBLISH_FAILURE, return HTTP 500
        Source system (openHIM) will retry based on its retry policy
 ```
 
@@ -183,22 +183,22 @@ One table owned by this service, managed by Flyway:
 
 | Table | Purpose | Partitioned |
 |-------|---------|-------------|
-| `inbound_event` | Raw request audit log + rejection tracking; primary dedup via `UNIQUE(cloudevents_id, source)` | No |
+| `inbound_event_log` | Raw request audit log + rejection tracking; primary dedup via `UNIQUE(cloudevents_id, source)` | No |
 
 ### Entity
 
 ```
-inbound_event  (single table — audit, dedup, rejection tracking)
+inbound_event_log  (single table — audit, dedup, rejection tracking)
 ```
 
-> **Note:** Rejected events are tracked directly on `inbound_event` via `status`, `rejection_reason`, and `error_details` columns. 
+> **Note:** Rejected events are tracked directly on `inbound_event_log` via `status`, `rejection_reason`, and `error_details` columns. 
 
 ### Deduplication Constraints & Indexes
 
 | Constraint / Index | Table | Columns | Purpose |
 |-----------|-------|---------|--------|
-| `UNIQUE(cloudevents_id, source)` | `inbound_event` | `(cloudevents_id, source)` | Authoritative dedup (unique constraint) |
-| `idx_inbound_event_dedup` | `inbound_event` | `(cloudevents_id, source, received_at)` | Lookback dedup query — covers `WHERE cloudevents_id = ? AND source = ? AND received_at > ?` (index-only scan) |
+| `UNIQUE(cloudevents_id, source)` | `inbound_event_log` | `(cloudevents_id, source)` | Authoritative dedup (unique constraint) |
+| `idx_inbound_event_log_dedup` | `inbound_event_log` | `(cloudevents_id, source, received_at)` | Lookback dedup query — covers `WHERE cloudevents_id = ? AND source = ? AND received_at > ?` (index-only scan) |
 
 
 ## 8. Deduplication Strategy
@@ -207,11 +207,11 @@ PostgreSQL-based deduplication with a configurable lookback window (default: 30 
 
 ### Lookback Query
 
-On event arrival, the service queries `inbound_event` for records matching `(source, cloudevents_id)` within the configured lookback window. This limits the query scope instead of scanning the entire database.
+On event arrival, the service queries `inbound_event_log` for records matching `(source, cloudevents_id)` within the configured lookback window. This limits the query scope instead of scanning the entire database.
 
 ### PostgreSQL Unique Constraint (Authoritative)
 
-The unique constraint on `inbound_event` serves as the permanent deduplication layer.
+The unique constraint on `inbound_event_log` serves as the permanent deduplication layer.
 
 ### Idempotency Contract
 
@@ -227,7 +227,7 @@ The unique constraint on `inbound_event` serves as the permanent deduplication l
 |-------|-----|---------|
 | `cce.events.inbound` | `subject` (patient UPID) | Validated events for Compliance Service |
 
-> **Note:** Rejected events are tracked in `inbound_event` (status = REJECTED, rejection_reason, error_details). No dead-letter topic is implemented — rejection monitoring is done via database queries and the `cce.collector.events.rejected` counter metric (tagged by reason).
+> **Note:** Rejected events are tracked in `inbound_event_log` (status = REJECTED, rejection_reason, error_details). No dead-letter topic is implemented — rejection monitoring is done via database queries and the `cce.collector.events.rejected` counter metric (tagged by reason).
 
 ### Producer Configuration
 
@@ -316,6 +316,6 @@ The Compliance Service consumes CloudEvents JSON objects from `cce.events.inboun
 4. **Field names use CloudEvents spec convention (lowercase)** — e.g., `specversion`, `datacontenttype`, `correlationid`
 5. **Kafka key is `subject`** — per-patient ordering
 6. **`correlationid` is always present** — for distributed tracing
-7. **Each message maps to an `inbound_event` row** — authoritative source of truth
+7. **Each message maps to an `inbound_event_log` row** — authoritative source of truth
 
 The Collector does NOT populate `protocolinstanceid`, `protocoldefinitionid`, or `actionid` — the Compliance Service resolves these independently.

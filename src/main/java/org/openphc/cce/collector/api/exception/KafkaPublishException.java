@@ -7,7 +7,7 @@ import lombok.Getter;
  *
  * <p>Mapped to HTTP 500 Internal Server Error by {@code GlobalExceptionHandler}.
  * The source system is expected to retry on this error. The event is persisted
- * in {@code inbound_event} with {@code status = REJECTED} and
+ * in {@code inbound_event_log} with {@code status = REJECTED} and
  * {@code rejection_reason = KAFKA_PUBLISH_FAILURE}.</p>
  */
 @Getter

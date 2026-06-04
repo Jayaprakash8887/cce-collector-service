@@ -1,7 +1,7 @@
 package org.openphc.cce.collector.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.openphc.cce.collector.domain.repository.InboundEventRepository;
+import org.openphc.cce.collector.domain.repository.InboundEventLogRepository;
 import org.openphc.cce.collector.kafka.InboundEventProducer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -34,7 +34,7 @@ public abstract class AbstractIntegrationTest {
     protected ObjectMapper objectMapper;
 
     @Autowired
-    protected InboundEventRepository inboundEventRepository;
+    protected InboundEventLogRepository inboundEventRepository;
 
     @MockitoBean
     protected InboundEventProducer inboundEventProducer;
