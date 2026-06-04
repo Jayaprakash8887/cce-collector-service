@@ -31,7 +31,7 @@ The **Collector Service** is the event ingestion gateway of the Care Coordinatio
 │  (via openHIM)    │  CloudEvents v1.0 JSON  │                     │   Synchronous publish     │               │
 └───────────────────┘                         │  ┌───────────────┐  │                           └───────────────┘
                                               │  │ PostgreSQL    │  │
-                                              │  │ inbound_event │  │
+                                              │  │ inbound_event_log │  │
                                               │  └───────────────┘  │
                                               └─────────────────────┘
 ```
@@ -41,7 +41,7 @@ The **Collector Service** is the event ingestion gateway of the Care Coordinatio
 2. Validate CloudEvents envelope (specversion, id, source, type, subject, data, datacontenttype)
 3. Check payload size (default max: 1 MB)
 4. Deduplication check (cloudevents_id + source within lookback window)
-5. Persist to `inbound_event` table (status = RECEIVED)
+5. Persist to `inbound_event_log` table (status = RECEIVED)
 6. Apply server-side defaults (correlationid, time)
 7. Validate payload (FHIR R4 structural validation or plain JSON check)
 8. Update status to ACCEPTED and publish to Kafka synchronously
@@ -235,12 +235,12 @@ curl -X POST http://localhost:8081/v1/events \
 
 ## Rejected Event Management
 
-Rejected events are tracked directly in the `inbound_event` table with `status = 'REJECTED'`. There are no separate REST endpoints for rejection management — investigation is done via direct database queries.
+Rejected events are tracked directly in the `inbound_event_log` table with `status = 'REJECTED'`. There are no separate REST endpoints for rejection management — investigation is done via direct database queries.
 
 **Query rejected events:**
 ```sql
 SELECT id, cloudevents_id, source, type, subject, rejection_reason, error_details, received_at
-FROM inbound_event
+FROM inbound_event_log
 WHERE status = 'REJECTED'
 ORDER BY received_at DESC
 LIMIT 20;
@@ -249,7 +249,7 @@ LIMIT 20;
 **Count rejected events by reason:**
 ```sql
 SELECT rejection_reason, COUNT(*) as count
-FROM inbound_event
+FROM inbound_event_log
 WHERE status = 'REJECTED'
 GROUP BY rejection_reason
 ORDER BY count DESC;
@@ -257,7 +257,7 @@ ORDER BY count DESC;
 
 **Investigate a specific rejected event:**
 ```sql
-SELECT * FROM inbound_event WHERE id = '<uuid>';
+SELECT * FROM inbound_event_log WHERE id = '<uuid>';
 ```
 
 ## Configuration Reference
@@ -365,7 +365,7 @@ GET /actuator/prometheus
 
 ## Architecture Decisions
 
-1. **Single-table design:** All events (received, accepted, rejected) stored in `inbound_event`. No separate dead-letter or event-log tables. Simplifies operations and avoids cross-table consistency issues.
+1. **Single-table design:** All events (received, accepted, rejected) stored in `inbound_event_log`. No separate dead-letter or event-log tables. Simplifies operations and avoids cross-table consistency issues.
 
 2. **Synchronous Kafka publish:** Events are published to Kafka within the HTTP request. No outbox pattern, no scheduled retry. Source systems retry on 500 errors. This keeps the service stateless and operationally simple.
 

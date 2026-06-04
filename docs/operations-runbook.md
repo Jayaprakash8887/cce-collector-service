@@ -132,28 +132,28 @@ Recommended panels for a Collector Service dashboard:
 
 ### Overview
 
-Rejected events are events that failed validation or processing. They are tracked in the `inbound_event` table with `status = 'REJECTED'`, along with `rejection_reason` and `error_details` columns. The Collector Service does not expose REST endpoints for querying rejected events — investigation is done via direct database queries.
+Rejected events are events that failed validation or processing. They are tracked in the `inbound_event_log` table with `status = 'REJECTED'`, along with `rejection_reason` and `error_details` columns. The Collector Service does not expose REST endpoints for querying rejected events — investigation is done via direct database queries.
 
 ### Direct Database Query
 
 ```sql
 -- Count by rejection reason
 SELECT rejection_reason, COUNT(*) 
-FROM inbound_event 
+FROM inbound_event_log 
 WHERE status = 'REJECTED' 
 GROUP BY rejection_reason 
 ORDER BY count DESC;
 
 -- Recent failures
 SELECT id, cloudevents_id, source, rejection_reason, error_details, received_at
-FROM inbound_event 
+FROM inbound_event_log 
 WHERE status = 'REJECTED' 
 ORDER BY received_at DESC 
 LIMIT 20;
 
 -- Failures by source
 SELECT source, COUNT(*) 
-FROM inbound_event 
+FROM inbound_event_log 
 WHERE status = 'REJECTED'
   AND received_at > NOW() - INTERVAL '24 hours'
 GROUP BY source 
@@ -164,7 +164,7 @@ ORDER BY count DESC;
 
 ```sql
 -- Clean old rejected events (e.g., after source system is fixed)
-DELETE FROM inbound_event 
+DELETE FROM inbound_event_log 
 WHERE source = 'ebuzima/broken-facility' 
   AND status = 'REJECTED'
   AND received_at < NOW() - INTERVAL '7 days';
@@ -198,15 +198,15 @@ SELECT
   pg_size_pretty(pg_relation_size(oid)) AS data_size,
   pg_size_pretty(pg_indexes_size(oid)) AS index_size
 FROM pg_class
-WHERE relname IN ('inbound_event')
+WHERE relname IN ('inbound_event_log')
 ORDER BY pg_total_relation_size(oid) DESC;
 ```
 
 ### Archive Old Data
 
 ```sql
--- Clean old inbound_event records (keep 90 days)
-DELETE FROM inbound_event WHERE received_at < NOW() - INTERVAL '90 days';
+-- Clean old inbound_event_log records (keep 90 days)
+DELETE FROM inbound_event_log WHERE received_at < NOW() - INTERVAL '90 days';
 ```
 
 ---
@@ -217,10 +217,10 @@ DELETE FROM inbound_event WHERE received_at < NOW() - INTERVAL '90 days';
 
 **Symptoms:** Event returns 500 Internal Server Error.
 
-1. Check `inbound_event` table:
+1. Check `inbound_event_log` table:
    ```sql
    SELECT id, cloudevents_id, status, rejection_reason, error_details
-   FROM inbound_event 
+   FROM inbound_event_log 
    WHERE cloudevents_id = 'evt-xxx' 
    ORDER BY received_at DESC;
    ```
@@ -241,7 +241,7 @@ DELETE FROM inbound_event WHERE received_at < NOW() - INTERVAL '90 days';
 1. Check if source system is retrying:
    ```sql
    SELECT source, cloudevents_id, COUNT(*) 
-   FROM inbound_event 
+   FROM inbound_event_log 
    WHERE status = 'DUPLICATE' 
      AND received_at > NOW() - INTERVAL '1 hour'
    GROUP BY source, cloudevents_id 
@@ -258,7 +258,7 @@ DELETE FROM inbound_event WHERE received_at < NOW() - INTERVAL '90 days';
 1. Check rejected events for error details:
    ```sql
    SELECT cloudevents_id, source, rejection_reason, error_details, raw_payload
-   FROM inbound_event 
+   FROM inbound_event_log 
    WHERE status = 'REJECTED' AND rejection_reason = 'INVALID_FHIR' 
    ORDER BY received_at DESC 
    LIMIT 10;
@@ -360,14 +360,14 @@ The following MDC fields are set per-request for correlation:
 ### Kafka Total Outage
 
 1. The service returns **HTTP 500** for all incoming events (Kafka publish fails)
-2. Events are persisted in `inbound_event` with `status = 'REJECTED'` and `rejection_reason = 'KAFKA_PUBLISH_FAILURE'`
+2. Events are persisted in `inbound_event_log` with `status = 'REJECTED'` and `rejection_reason = 'KAFKA_PUBLISH_FAILURE'`
 3. Source systems (openHIM mediators) will retry based on their own retry policy
 4. When Kafka recovers, new requests will succeed immediately
 5. Previously rejected events require the source system to re-submit:
    ```sql
    -- List events rejected due to Kafka failure
    SELECT id, cloudevents_id, source, received_at
-   FROM inbound_event
+   FROM inbound_event_log
    WHERE status = 'REJECTED' AND rejection_reason = 'KAFKA_PUBLISH_FAILURE'
    ORDER BY received_at DESC;
    ```

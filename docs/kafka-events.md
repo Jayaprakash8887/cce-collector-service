@@ -20,7 +20,7 @@ Detailed reference for all Kafka topics, message schemas, publishing contracts, 
 
 ### 1.2 Rejected Event Handling
 
-Rejected events are **not** published to a Kafka topic. They are tracked directly in the `inbound_event` database table with `status = 'REJECTED'`, `rejection_reason`, and `error_details` columns. This avoids a dependency on Kafka for monitoring rejections.
+Rejected events are **not** published to a Kafka topic. They are tracked directly in the `inbound_event_log` database table with `status = 'REJECTED'`, `rejection_reason`, and `error_details` columns. This avoids a dependency on Kafka for monitoring rejections.
 
 Operational monitoring of rejections is supported via:
 - **Database queries** — see the Operations Runbook for SQL examples
@@ -140,16 +140,16 @@ The Kafka message value is a CloudEvents JSON object. Field names use **lowercas
 The Collector publishes to Kafka **synchronously** during request processing. There is no outbox pattern or background retry.
 
 ```
-HTTP Request → Validate → Persist (inbound_event, status=ACCEPTED) → Kafka Publish → 202 Accepted
+HTTP Request → Validate → Persist (inbound_event_log, status=ACCEPTED) → Kafka Publish → 202 Accepted
                                                                      → Failure → Update (status=REJECTED, reason=KAFKA_PUBLISH_FAILURE) → 500 Internal Server Error
 ```
 
 ### How It Works
 
-1. Validated event is persisted to `inbound_event` with `status = 'ACCEPTED'`
+1. Validated event is persisted to `inbound_event_log` with `status = 'ACCEPTED'`
 2. `KafkaTemplate.send()` publishes the message to Kafka synchronously
 3. On success: HTTP 202 returned to caller
-4. On failure: `inbound_event` updated to `status = 'REJECTED'`, `rejection_reason = 'KAFKA_PUBLISH_FAILURE'` — HTTP 500 returned to caller
+4. On failure: `inbound_event_log` updated to `status = 'REJECTED'`, `rejection_reason = 'KAFKA_PUBLISH_FAILURE'` — HTTP 500 returned to caller
 5. **No background retry** — the source system is expected to retry the request
 
 ---
@@ -189,7 +189,7 @@ The Compliance Service consumes from `cce.events.inbound` with these guarantees 
 | 4 | Field names use CloudEvents lowercase convention | e.g., `specversion`, `datacontenttype`, `correlationid` |
 | 5 | Kafka key = `subject` | Per-patient ordering |
 | 6 | `correlationid` always present | For distributed tracing |
-| 7 | Each message maps to an `inbound_event` row | Authoritative source of truth |
+| 7 | Each message maps to an `inbound_event_log` row | Authoritative source of truth |
 
 **What the Collector does NOT populate:**
 - `protocolinstanceid` — Compliance Service resolves this from its `protocol_instance` table

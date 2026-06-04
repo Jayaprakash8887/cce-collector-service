@@ -184,7 +184,7 @@ Flyway runs automatically on startup. Migrations are located in `src/main/resour
 
 | Migration | Description |
 |-----------|-------------|
-| `V1__create_inbound_event.sql` | `inbound_event` table with dedup constraint and rejection tracking columns |
+| `V1__create_inbound_event_log.sql` | `inbound_event_log` table with dedup constraint and rejection tracking columns |
 
 ### Manual Migration Execution
 
@@ -336,7 +336,7 @@ kafka-topics.sh --create \
   --bootstrap-server kafka:9092
 ```
 
-> **Note:** Rejected events are tracked in `inbound_event` (database). No dead-letter Kafka topic is implemented.
+> **Note:** Rejected events are tracked in `inbound_event_log` (database). No dead-letter Kafka topic is implemented.
 
 ### Recommended Production Topic Configuration
 
@@ -360,4 +360,4 @@ kafka-topics.sh --create \
 - [ ] Monitoring: Expose `/actuator/prometheus` to Prometheus scraper
 - [ ] Logging: Configure log aggregation (ELK/Loki) — JSON structured output enabled by default
 - [ ] TLS: Terminate TLS at load balancer or ingress controller
-- [ ] Backups: Schedule PostgreSQL pg_dump for `inbound_event`
+- [ ] Backups: Schedule PostgreSQL pg_dump for `inbound_event_log`
