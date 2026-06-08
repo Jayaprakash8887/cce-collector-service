@@ -24,7 +24,7 @@ spring:
 
   # ---------- DataSource (PostgreSQL + HikariCP) ----------
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/cce_collector}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/ccedb}
     username: ${SPRING_DATASOURCE_USERNAME:cce_user}
     password: ${SPRING_DATASOURCE_PASSWORD:cce_pass}
     driver-class-name: org.postgresql.Driver

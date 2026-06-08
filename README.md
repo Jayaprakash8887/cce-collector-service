@@ -270,7 +270,7 @@ SELECT * FROM inbound_event_log WHERE id = '<uuid>';
 | `server.shutdown` | `graceful` | Graceful shutdown mode |
 | `server.tomcat.threads.max` | `200` | Max Tomcat worker threads |
 | `spring.lifecycle.timeout-per-shutdown-phase` | `30s` | Graceful shutdown timeout |
-| `spring.datasource.url` | `jdbc:postgresql://localhost:5433/cce_collector` | PostgreSQL JDBC URL |
+| `spring.datasource.url` | `jdbc:postgresql://localhost:5433/ccedb` | PostgreSQL JDBC URL |
 | `spring.datasource.username` | `cce_user` | Database username |
 | `spring.datasource.password` | `cce_pass` | Database password |
 | `spring.datasource.hikari.maximum-pool-size` | `10` | HikariCP max pool size |
