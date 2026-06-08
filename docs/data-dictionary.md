@@ -23,6 +23,7 @@ Every HTTP request is persisted **as-is** before processing. Used for audit trai
 | `rejection_reason` | `VARCHAR(50)` | Yes | — | Rejection reason code (if status = `REJECTED`; see `RejectionReason` enum) |
 | `error_details` | `TEXT` | Yes | — | Stack trace or validation error messages |
 | `received_at` | `TIMESTAMPTZ` | No | `now()` | Server-side receipt timestamp (UTC) |
+| `updated_at` | `TIMESTAMPTZ` | No | `now()` | Last modification timestamp (auto-updated via `@PreUpdate`) |
 
 **Constraints:**
 - `PK`: `id`

@@ -7,6 +7,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -73,6 +74,10 @@ public class InboundEventLog {
     @Builder.Default
     private OffsetDateTime receivedAt = OffsetDateTime.now();
 
+    @Column(name = "updated_at", nullable = false)
+    @Builder.Default
+    private OffsetDateTime updatedAt = OffsetDateTime.now();
+
     /**
      * Generates a UUIDv7 (time-ordered) primary key before persisting.
      */
@@ -81,5 +86,10 @@ public class InboundEventLog {
         if (this.id == null) {
             this.id = Generators.timeBasedEpochGenerator().generate();
         }
+    }
+
+    @PreUpdate
+    void onUpdate() {
+        this.updatedAt = OffsetDateTime.now();
     }
 }

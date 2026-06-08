@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS inbound_event_log (
     rejection_reason    VARCHAR(50),
     error_details       TEXT,
     received_at         TIMESTAMPTZ     NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ     NOT NULL DEFAULT now(),
 
     -- Primary deduplication constraint
     CONSTRAINT uq_inbound_event_log_id_source UNIQUE (cloudevents_id, source)
@@ -23,3 +24,6 @@ CREATE INDEX idx_inbound_event_log_dedup      ON inbound_event_log (cloudevents_
 CREATE INDEX idx_inbound_event_log_source     ON inbound_event_log (source);
 CREATE INDEX idx_inbound_event_log_status     ON inbound_event_log (status);
 CREATE INDEX idx_inbound_event_log_received   ON inbound_event_log (received_at);
+
+-- Replica identity for logical replication (CDC)
+ALTER TABLE inbound_event_log REPLICA IDENTITY FULL;

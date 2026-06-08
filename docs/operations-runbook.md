@@ -35,7 +35,7 @@ echo "=== Application ==="
 curl -s http://localhost:8080/actuator/health | jq .status
 
 echo "=== PostgreSQL ==="
-psql -h localhost -p 5433 -U cce_user -d cce_collector -c "SELECT 1;"
+psql -h localhost -p 5433 -U cce_user -d ccedb -c "SELECT 1;"
 
 echo "=== Kafka ==="
 kafka-topics.sh --list --bootstrap-server localhost:9092
@@ -280,13 +280,13 @@ DELETE FROM inbound_event_log WHERE received_at < NOW() - INTERVAL '90 days';
 
 1. Check current pool state:
    ```sql
-   SELECT count(*) FROM pg_stat_activity WHERE datname = 'cce_collector';
+   SELECT count(*) FROM pg_stat_activity WHERE datname = 'ccedb';
    ```
 2. Identify long-running queries:
    ```sql
    SELECT pid, now() - pg_stat_activity.query_start AS duration, query
    FROM pg_stat_activity
-   WHERE datname = 'cce_collector' AND state != 'idle'
+   WHERE datname = 'ccedb' AND state != 'idle'
    ORDER BY duration DESC;
    ```
 3. Increase pool size if needed:

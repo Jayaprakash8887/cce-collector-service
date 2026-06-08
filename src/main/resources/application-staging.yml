@@ -14,7 +14,7 @@ server:
 
 spring:
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/cce_collector}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/ccedb}
     hikari:
       maximum-pool-size: ${SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE:15}
 

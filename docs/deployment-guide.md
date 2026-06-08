@@ -25,7 +25,7 @@ docker compose up -d
 ```
 
 This creates the `cce-net` Docker bridge network and starts:
-- **PostgreSQL** on port `5433` (user: `cce_user`, password: `cce_pass`, database: `cce_collector`)
+- **PostgreSQL** on port `5433` (user: `cce_user`, password: `cce_pass`, database: `ccedb`)
 - **Kafka** on port `29092` (host) / `9092` (inter-container, KRaft mode, single broker)
 - **Kafka UI** on port `8090`
 
@@ -112,7 +112,7 @@ All configuration can be overridden via environment variables using Spring Boot'
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://localhost:5433/cce_collector` | JDBC URL |
+| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://localhost:5433/ccedb` | JDBC URL |
 | `SPRING_DATASOURCE_USERNAME` | `cce_user` | Database username |
 | `SPRING_DATASOURCE_PASSWORD` | `cce_pass` | Database password |
 | `SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE` | `10` | Connection pool max size |
@@ -169,7 +169,7 @@ docker run -d \
   --name cce-collector \
   -p 8080:8080 \
   -e SPRING_PROFILES_ACTIVE=production \
-  -e SPRING_DATASOURCE_URL=jdbc:postgresql://db-host:5432/cce_collector \
+  -e SPRING_DATASOURCE_URL=jdbc:postgresql://db-host:5432/ccedb \
   -e SPRING_DATASOURCE_USERNAME=cce_user \
   -e SPRING_DATASOURCE_PASSWORD=cce_pass \
   -e SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka-host:9092 \
@@ -190,7 +190,7 @@ Flyway runs automatically on startup. Migrations are located in `src/main/resour
 
 ```bash
 ./gradlew flywayMigrate \
-  -Pflyway.url=jdbc:postgresql://localhost:5432/cce_collector \
+  -Pflyway.url=jdbc:postgresql://localhost:5432/ccedb \
   -Pflyway.user=cce_user \
   -Pflyway.password=cce_pass
 ```
@@ -296,7 +296,7 @@ metadata:
   name: cce-db-secret
 type: Opaque
 stringData:
-  url: jdbc:postgresql://pg-host:5432/cce_collector
+  url: jdbc:postgresql://pg-host:5432/ccedb
   username: cce_user
   password: <your-password>
 ```
@@ -350,7 +350,7 @@ kafka-topics.sh --create \
 
 ## 9. Production Checklist
 
-- [ ] PostgreSQL: Create database `cce_collector`, grant permissions to `cce_user`
+- [ ] PostgreSQL: Create database `ccedb`, grant permissions to `cce_user`
 - [ ] PostgreSQL: Tune `shared_buffers`, `work_mem`, `effective_cache_size`
 - [ ] Kafka: Verify topic auto-creation on startup (25 partitions, replication factor 3 via production profile)
 - [ ] Kafka: Confirm `min.insync.replicas=2` on inbound topic
