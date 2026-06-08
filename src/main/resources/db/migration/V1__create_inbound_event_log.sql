@@ -24,3 +24,6 @@ CREATE INDEX idx_inbound_event_log_dedup      ON inbound_event_log (cloudevents_
 CREATE INDEX idx_inbound_event_log_source     ON inbound_event_log (source);
 CREATE INDEX idx_inbound_event_log_status     ON inbound_event_log (status);
 CREATE INDEX idx_inbound_event_log_received   ON inbound_event_log (received_at);
+
+-- Replica identity for logical replication (CDC)
+ALTER TABLE inbound_event_log REPLICA IDENTITY FULL;
