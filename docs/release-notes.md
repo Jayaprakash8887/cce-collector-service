@@ -288,3 +288,4 @@ N/A — initial release.
 | CCE-61 | Observability (Micrometer, Kafka health indicator) |
 | CCE-62 | Integration tests (23 end-to-end tests) |
 | CCE-63 | Configuration tuning, documentation, code optimization |
+
