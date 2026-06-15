@@ -71,7 +71,7 @@ class MetricsInstrumentationTest {
         service = new EventIngestionService(
                 cloudEventValidator, deduplicationService, repository,
                 enricher, payloadValidator, eventPublisher, rejectionService,
-                kafkaTopicProperties, meterRegistry, 1_048_576L);
+                kafkaTopicProperties, MAPPER, meterRegistry, 1_048_576L);
 
         lenient().when(payloadValidator.validatePayload(any()))
                 .thenReturn(PayloadValidationResult.builder()

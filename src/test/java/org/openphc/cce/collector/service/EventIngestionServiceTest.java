@@ -87,6 +87,7 @@ class EventIngestionServiceTest {
                 eventPublisher,
                 rejectionService,
                 kafkaTopicProperties,
+                MAPPER,
                 meterRegistry,
                 MAX_PAYLOAD_SIZE
         );
