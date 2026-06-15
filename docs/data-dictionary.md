@@ -133,19 +133,20 @@ Published to `cce.events.inbound` using **CloudEvents spec field names (lowercas
 
 ## 5. Field Name Reference (HTTP → Database)
 
-The Collector preserves CloudEvents lowercase field names end-to-end (HTTP → Kafka). The database stores only a minimal set of columns for deduplication and audit purposes; the full request is in `raw_payload` (JSONB).
+The Collector preserves CloudEvents lowercase field names end-to-end (HTTP → Kafka). The database promotes only three fields to dedicated columns (for deduplication and tracing queries); the entire request is serialized as-is into `raw_payload` (JSONB) with no enrichment.
 
 | HTTP / Kafka Field (lowercase) | Database Column | Stored in DB? |
 |-------------------------------|----------------|---------------|
-| `id` | `cloudevents_id` | Yes |
-| `source` | `source` | Yes |
-| `correlationid` | `correlation_id` | Yes |
-| `data` | `raw_payload` | Yes (full request body) |
+| `id` | `cloudevents_id` | Yes — dedicated column (deduplication key) |
+| `source` | `source` | Yes — dedicated column (deduplication key) |
+| `correlationid` | `correlation_id` | Yes — dedicated column (tracing) |
+| *(entire request)* | `raw_payload` | Yes — all CloudEvents fields serialized as-is |
 | `specversion` | — | No (in `raw_payload`) |
 | `type` | — | No (in `raw_payload`) |
 | `subject` | — | No (in `raw_payload`) |
 | `time` | — | No (in `raw_payload`) |
 | `datacontenttype` | — | No (in `raw_payload`) |
+| `data` | — | No (in `raw_payload`) |
 | `facilityid` | — | No (in `raw_payload`) |
 | `sourceeventid` | — | No (in `raw_payload`) |
 | `protocolinstanceid` | — | No (in `raw_payload`) |

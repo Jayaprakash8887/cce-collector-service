@@ -15,6 +15,7 @@ import org.openphc.cce.collector.domain.model.InboundEventLog;
 import org.openphc.cce.collector.domain.model.enums.InboundStatus;
 import org.openphc.cce.collector.domain.model.enums.RejectionReason;
 import org.openphc.cce.collector.domain.repository.InboundEventLogRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -29,8 +30,8 @@ import java.util.List;
  *   <li>Receive HTTP POST → parse request body (handled by Spring MVC)</li>
  *   <li>CloudEvents envelope validation → 400 on failure</li>
  *   <li>Deduplication check → 200 (idempotent) if duplicate</li>
- *   <li>Persist to {@code inbound_event_log} (status = RECEIVED)</li>
-     *   <li>Apply server-side defaults (correlationid, time)</li>
+ *   <li>Persist to {@code inbound_event_log} (status = RECEIVED) — raw request stored as-is</li>
+ *   <li>Apply server-side defaults (correlationid, time)</li>
  *   <li>Payload validation (branched by datacontenttype) → 422 on failure</li>
  *   <li>Update {@code inbound_event_log.status} = ACCEPTED</li>
  *   <li>Synchronous Kafka publish → 500 on failure</li>
@@ -57,6 +58,7 @@ public class EventIngestionService {
     private final EventPublisher eventPublisher;
     private final RejectionService rejectionService;
     private final KafkaTopicProperties kafkaTopicProperties;
+    private final ObjectMapper objectMapper;
     private final long maxPayloadSize;
 
     // ── Metrics ────────────────────────────────────────────────
@@ -75,6 +77,7 @@ public class EventIngestionService {
             EventPublisher eventPublisher,
             RejectionService rejectionService,
             KafkaTopicProperties kafkaTopicProperties,
+            ObjectMapper objectMapper,
             MeterRegistry meterRegistry,
             @Value("${cce.collector.max-payload-size:1048576}") long maxPayloadSize) {
         this.cloudEventValidator = cloudEventValidator;
@@ -85,6 +88,7 @@ public class EventIngestionService {
         this.eventPublisher = eventPublisher;
         this.rejectionService = rejectionService;
         this.kafkaTopicProperties = kafkaTopicProperties;
+        this.objectMapper = objectMapper;
         this.meterRegistry = meterRegistry;
         this.maxPayloadSize = maxPayloadSize;
 
@@ -262,16 +266,16 @@ public class EventIngestionService {
     /**
      * Build an {@link InboundEventLog} entity from the request.
      *
-     * <p>Uses builder defaults for {@code specVersion}, {@code status} (RECEIVED),
-     * and {@code receivedAt} (now). Fields managed by {@link EventDefaultsEnricher}
-     * (correlationId, eventTime) are set during Step 5. The {@code dataContentType}
-     * is set directly from the request (required field).</p>
+     * <p>Serializes the entire {@link EventIngestionRequest} as-is into {@code rawPayload}
+     * with no enrichment — all CloudEvents attributes and the original FHIR data are stored
+     * exactly as received. {@code cloudeventsId} and {@code source} are also promoted to
+     * dedicated columns to support deduplication queries without parsing the raw JSON.</p>
      */
     private InboundEventLog buildInboundEvent(EventIngestionRequest request) {
         return InboundEventLog.builder()
                 .cloudeventsId(request.getId())
                 .source(request.getSource())
-                .rawPayload(request.getData().toString())
+                .rawPayload(objectMapper.valueToTree(request).toString())
                 .build();
     }
 
