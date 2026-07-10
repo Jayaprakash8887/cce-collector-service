@@ -264,7 +264,7 @@ DELETE FROM inbound_event_log WHERE received_at < NOW() - INTERVAL '90 days';
    LIMIT 10;
    ```
 2. Common causes:
-   - Missing `resourceType` field in data payload
+   - Missing `resourceType` field, or a value that is not a recognized FHIR R4 resource type
    - Malformed JSON in data field
    - Non-standard FHIR resource structure
 3. Test locally with HAPI FHIR validator:

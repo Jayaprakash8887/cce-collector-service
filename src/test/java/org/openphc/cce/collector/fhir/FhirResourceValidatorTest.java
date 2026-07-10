@@ -125,6 +125,23 @@ class FhirResourceValidatorTest {
         }
 
         @Test
+        @DisplayName("unrecognized (non-FHIR-R4) resourceType returns error")
+        void unrecognizedResourceType() {
+            JsonNode data = mapper.valueToTree(Map.of(
+                    "resourceType", "UnknownFooBar",
+                    "id", "example"));
+
+            PayloadValidationResult result = validator.validate(data, "UPID-12345");
+
+            assertThat(result.isValid()).isFalse();
+            assertThat(result.getErrors())
+                    .hasSize(1)
+                    .first().asString()
+                    .contains("resourceType");
+            assertThat(result.getParsedResource()).isNull();
+        }
+
+        @Test
         @DisplayName("blank resourceType returns error")
         void blankResourceType() {
             JsonNode data = mapper.valueToTree(Map.of(
@@ -138,32 +155,6 @@ class FhirResourceValidatorTest {
                     .hasSize(1)
                     .first().asString()
                     .contains("resourceType");
-        }
-    }
-
-    // ════════════════════════════════════════════════════════════════
-    // Parse failure
-    // ════════════════════════════════════════════════════════════════
-
-    @Nested
-    @DisplayName("Parse failure")
-    class ParseFailure {
-
-        @Test
-        @DisplayName("unknown resourceType returns parse error")
-        void unknownResourceType() {
-            JsonNode data = mapper.valueToTree(Map.of(
-                    "resourceType", "UnknownFooBar",
-                    "id", "example"));
-
-            PayloadValidationResult result = validator.validate(data, "UPID-12345");
-
-            assertThat(result.isValid()).isFalse();
-            assertThat(result.getErrors())
-                    .hasSize(1)
-                    .first().asString()
-                    .contains("Failed to parse FHIR resource");
-            assertThat(result.getParsedResource()).isNull();
         }
     }
 

@@ -201,7 +201,7 @@ Multi-word field names follow the CloudEvents convention of concatenated lowerca
 | Check | Severity |
 |-------|----------|
 | Valid JSON structure | Error → reject |
-| `resourceType` present | Error → reject |
+| `resourceType` present and a recognized FHIR R4 resource type | Error → reject |
 | HAPI FHIR parseable | Error → reject |
 | `subject.reference` matches `subject` field | Error → reject |
 

@@ -160,7 +160,7 @@ src/main/resources/
  7. Payload Validation
     a. If datacontenttype = application/fhir+json:
        i.   Parse data via HAPI FHIR
-       ii.  Validate resourceType is present and parseable
+       ii.  Validate resourceType is present and a recognized FHIR R4 resource type
        iii. Cross-check patient UPID against envelope `subject` (reject on mismatch)
             - Patient resource: extracted from identifier[] matching configured system URI,
               fallback to Patient.id
@@ -276,7 +276,7 @@ FHIR R4 structural validation via HAPI FHIR.
 | Check | Level | Action on Failure |
 |-------|-------|-------------------|
 | `data` parses as valid JSON | Required | Reject (`INVALID_FHIR`) |
-| `data.resourceType` present and non-empty | Required | Reject (`INVALID_FHIR`) |
+| `data.resourceType` present and a recognized FHIR R4 resource type | Required | Reject (`INVALID_FHIR`) |
 | HAPI FHIR can parse into `IBaseResource` | Required | Reject (`INVALID_FHIR`) |
 | Patient UPID matches `subject` | Required | Reject (`INVALID_FHIR`) |
 
