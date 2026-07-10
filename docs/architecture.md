@@ -14,7 +14,7 @@ It receives clinical events from external EHR/RHIE systems (via openHIM mediator
 | 2 | **Validate CloudEvents envelope** | Mandatory fields (`specversion`, `id`, `source`, `type`, `subject`), extensions, structure |
 | 3 | **Validate FHIR R4 payloads** | Structural validation of `data` when `datacontenttype` = `application/fhir+json` |
 | 4 | **Validate `type` presence** | Ensure `type` field is present and non-empty (mandatory CloudEvents attribute) — no format restriction |
-| 5 | **Apply server-side defaults** | Generate `correlationid` (UUID with `corr-` prefix) if absent; fill `time` with server `received_at` if absent |
+| 5 | **Apply server-side defaults** | Generate `correlationid` (UUID with `corr-` prefix) if absent; fill `time` with server `received_at` if absent; derive `event_time` (clinical occurrence time) from the FHIR payload, falling back to envelope `time` then `received_at` |
 | 6 | **Deduplicate inbound events** | Reject/mark duplicates using `(id, source)` compound key via PostgreSQL with configurable lookback window |
 | 7 | **Publish to Kafka** | Topic `cce.events.inbound` with `subject` (patient_id) as partition key |
 | 8 | **Record rejection details** | Persist rejection reason and error details on `inbound_event_log` for rejected events |
@@ -28,7 +28,7 @@ It receives clinical events from external EHR/RHIE systems (via openHIM mediator
 - Analytics or reporting → **Analytics Service**
 - Event type format validation or normalization (Collector only checks `type` is present and non-empty)
 - FHIR profile conformance validation (structural parse only)
-- Event transformation or enrichment beyond server-side defaults (`correlationid`, `time`)
+- Event transformation or enrichment beyond server-side defaults (`correlationid`, `time`, `event_time`)
 - Event routing to multiple topics
 
 ## 3. System Context
@@ -100,7 +100,8 @@ org.openphc.cce.collector/
 │   ├── EventIngestionService.java         #   Main orchestrator: validate → persist → publish
 │   ├── CloudEventValidator.java           #   CloudEvents v1.0 envelope validation
 │   ├── PayloadValidator.java              #   Payload validation: branches on datacontenttype (FHIR / JSON / unsupported)
-│   ├── EventDefaultsEnricher.java         #   Generates correlationId if absent, fills time if absent
+│   ├── EventDefaultsEnricher.java         #   Generates correlationId if absent, fills time if absent, derives event_time
+│   ├── ClinicalEventTimeExtractor.java    #   Extracts clinical occurrence time from FHIR payload (for event_time)
 │   ├── EventPublisher.java                #   Publishes enriched EventIngestionRequest to Kafka
 │   ├── DeduplicationService.java          #   DB dedup with configurable lookback window
 │   └── RejectionService.java              #   Updates inbound_event_log with rejection details
@@ -154,6 +155,8 @@ src/main/resources/
  5. Apply Server-Side Defaults
     a. Generate correlationid if absent (UUID with "corr-" prefix)
     b. Fill time with server received_at if absent
+    c. Derive event_time (clinical occurrence time) from FHIR payload via
+       ClinicalEventTimeExtractor; fall back to envelope time, then received_at
  7. Payload Validation
     a. If datacontenttype = application/fhir+json:
        i.   Parse data via HAPI FHIR

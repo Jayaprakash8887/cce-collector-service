@@ -1,12 +1,15 @@
 package org.openphc.cce.collector.service;
 
+import ca.uhn.fhir.context.FhirContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.openphc.cce.collector.api.dto.EventIngestionRequest;
 import org.openphc.cce.collector.domain.model.InboundEventLog;
+import org.openphc.cce.collector.fhir.FhirResourceParser;
 
 import java.time.OffsetDateTime;
 import java.util.Map;
@@ -28,7 +31,10 @@ class EventDefaultsEnricherTest {
 
     @BeforeEach
     void setUp() {
-        enricher = new EventDefaultsEnricher();
+        ClinicalEventTimeExtractor extractor =
+                new ClinicalEventTimeExtractor(new SimpleMeterRegistry());
+        FhirResourceParser parser = new FhirResourceParser(FhirContext.forR4());
+        enricher = new EventDefaultsEnricher(extractor, parser);
     }
 
     /**
@@ -159,6 +165,56 @@ class EventDefaultsEnricherTest {
 
             // Request is NOT mutated
             assertThat(request.getTime()).isEqualTo("2026-03-01T10:00:00Z");
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // Event time (clinical occurrence time) enrichment
+    // ════════════════════════════════════════════════════════════════
+
+    @Nested
+    @DisplayName("Event time enrichment")
+    class EventTimeEnrichment {
+
+        @Test
+        @DisplayName("extracts clinical time from FHIR payload when present")
+        void extractsClinicalTime() {
+            EventIngestionRequest request = requestWithoutOptionals();
+            request.setData(mapper.valueToTree(Map.of(
+                    "resourceType", "Encounter",
+                    "period", Map.of("start", "2026-03-01T08:00:00Z", "end", "2026-03-01T09:30:00Z"))));
+            InboundEventLog entity = baseEntity();
+
+            enricher.enrich(request, entity);
+
+            // Encounter prefers period.end
+            assertThat(entity.getEventTime())
+                    .isEqualTo(OffsetDateTime.parse("2026-03-01T09:30:00Z"));
+        }
+
+        @Test
+        @DisplayName("falls back to envelope time when no clinical field present")
+        void fallsBackToEnvelopeTime() {
+            EventIngestionRequest request = requestWithOptionals(); // time = 2026-03-01T10:00:00Z, no clinical field
+            InboundEventLog entity = baseEntity();
+
+            enricher.enrich(request, entity);
+
+            assertThat(entity.getEventTime())
+                    .isEqualTo(OffsetDateTime.parse("2026-03-01T10:00:00Z"));
+        }
+
+        @Test
+        @DisplayName("falls back to receivedAt when neither clinical field nor envelope time present")
+        void fallsBackToReceivedAt() {
+            EventIngestionRequest request = requestWithoutOptionals(); // no time, resourceType has no clinical field
+            InboundEventLog entity = baseEntity();
+            OffsetDateTime receivedAt = entity.getReceivedAt();
+
+            enricher.enrich(request, entity);
+
+            // enrichTime fills request.time from receivedAt, so eventTime resolves to receivedAt
+            assertThat(entity.getEventTime()).isEqualTo(receivedAt);
         }
     }
 
