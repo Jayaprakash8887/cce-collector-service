@@ -2,6 +2,25 @@
 
 ---
 
+## Unreleased — Clinical Event Time (`event_time`)
+
+**Branch:** `release-1.0.0`
+
+### Summary
+
+Added an `event_time` column to `inbound_event_log` capturing the **clinical occurrence time** — when the clinical act actually happened — as distinct from `received_at` (ingestion time) and the CloudEvents envelope `time` (emitter transmission clock). This lets downstream scheduling (Compliance Service) key off real-world clinical time so ingestion lag does not shift due/overdue/missed dates.
+
+- **New `ClinicalEventTimeExtractor`** (ported from [cce-compliance-service#64](https://github.com/openphc/cce-compliance-service/pull/64)) — best-effort extraction of the clinical time from the FHIR payload, with a per-resource-type candidate-field mapping (`Observation`, `Encounter`, `Procedure`, `Immunization`, `MedicationAdministration`, `Condition`, `ServiceRequest`, `DiagnosticReport`). See `docs/data-dictionary.md` §8.
+- **`EventDefaultsEnricher`** now derives `event_time` during enrichment with precedence: clinical time → envelope `time` → `received_at`. Extraction never throws; failures fall back silently.
+- **`event_time` is persistence-only** — not added to the Kafka message; consumers derive clinical time from the FHIR `data` payload themselves.
+- New metrics: `cce.clinical_time.unmapped`, `cce.clinical_time.unparseable`.
+
+### Migration
+
+- `V2__add_event_time_to_inbound_event_log.sql` — adds nullable `event_time TIMESTAMPTZ` + `idx_inbound_event_log_event_time` index.
+
+---
+
 ## v1.0.0 — Initial Release
 
 **Branch:** `release-1.0.0`  

@@ -209,6 +209,7 @@ erDiagram
         VARCHAR status
         VARCHAR rejection_reason
         TEXT error_details
+        TIMESTAMPTZ event_time
         TIMESTAMPTZ received_at
     }
 ```
@@ -230,6 +231,7 @@ flowchart LR
     subgraph Defaults["EventDefaultsEnricher"]
         N2["correlationid → corr-<uuid>"]
         N3["time → server received_at"]
+        N4["event_time → clinical time / envelope time / received_at<br/>(persisted to entity only, not published)"]
     end
 
     subgraph Output["Kafka Message (lowercase)"]

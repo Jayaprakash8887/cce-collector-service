@@ -10,7 +10,7 @@ Consolidated reference for all database tables, columns, enums, CloudEvents fiel
 
 Every HTTP request is persisted **as-is** before processing. Used for audit trail, primary deduplication, and rejection tracking. Rejected events are recorded directly on this table. The full CloudEvents payload is stored in `raw_payload` (JSONB) — individual CloudEvents fields are not denormalized into separate columns.
 
-**Migration:** `V1__create_inbound_event_log.sql`
+**Migrations:** `V1__create_inbound_event_log.sql`, `V2__add_event_time_to_inbound_event_log.sql`
 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
@@ -22,6 +22,7 @@ Every HTTP request is persisted **as-is** before processing. Used for audit trai
 | `status` | `VARCHAR(20)` | No | `'RECEIVED'` | Processing status (see `InboundStatus` enum) |
 | `rejection_reason` | `VARCHAR(50)` | Yes | — | Rejection reason code (if status = `REJECTED`; see `RejectionReason` enum) |
 | `error_details` | `TEXT` | Yes | — | Stack trace or validation error messages |
+| `event_time` | `TIMESTAMPTZ` | Yes | — | Clinical occurrence time — when the clinical act actually happened, extracted from the FHIR payload via `ClinicalEventTimeExtractor`. Falls back to the CloudEvents envelope `time`, then to `received_at`, when no clinical field is present (see §8). |
 | `received_at` | `TIMESTAMPTZ` | No | `now()` | Server-side receipt timestamp (UTC) |
 | `updated_at` | `TIMESTAMPTZ` | No | `now()` | Last modification timestamp (auto-updated via `@PreUpdate`) |
 
@@ -37,6 +38,7 @@ Every HTTP request is persisted **as-is** before processing. Used for audit trai
 | `idx_inbound_event_log_source` | `source` | Source-filtered queries |
 | `idx_inbound_event_log_status` | `status` | Status-based filtering and `countByStatus` queries |
 | `idx_inbound_event_log_received` | `received_at` | Time-range queries |
+| `idx_inbound_event_log_event_time` | `event_time` | Query/order by real-world clinical time rather than ingestion time |
 
 
 ---
@@ -189,8 +191,44 @@ The Collector accepts any valid FHIR R4 resource when `datacontenttype` is `appl
 
 ---
 
-## 8. Migrations
+## 8. Clinical Event Time Extraction (`event_time`)
+
+The `event_time` column captures the **clinical occurrence time** — when the clinical act actually happened — as opposed to `received_at` (ingestion time) or the CloudEvents envelope `time` (the emitter adaptor's transmission clock). Basing downstream scheduling on clinical time means ingestion lag (offline sync, batch upload, retries, DLQ replay) does not shift due/overdue/missed dates in the Compliance Service.
+
+`event_time` is populated during enrichment (`EventDefaultsEnricher`) with the following **precedence** — the first that resolves wins:
+
+1. **Clinical time** extracted from the FHIR `data` payload by `ClinicalEventTimeExtractor` (see mapping below).
+2. **CloudEvents envelope `time`** (already filled from `received_at` when the source omits it).
+3. **`received_at`** (server receipt timestamp).
+
+Extraction is **best-effort**: an unmapped resource type, a missing field, or an unparseable value yields `null` and the fallback chain takes over — so populating `event_time` can only ever *improve* accuracy where a clinical field is present, never regress or fail ingestion.
+
+FHIR has no single "when did this happen" field; each resource type carries its own, and most are polymorphic choice types (`effective[x]`, `performed[x]`, `occurrence[x]`). The extractor probes an ordered list of concrete JSON fields per resource type and takes the first that parses. For `Period` fields, `end` ("when it finished") is preferred over `start`.
+
+| FHIR Resource Type | Candidate fields (in priority order) |
+|--------------------|--------------------------------------|
+| `Observation` | `effectiveDateTime` → `effectiveInstant` → `effectivePeriod.end` → `effectivePeriod.start` → `issued` |
+| `Encounter` | `period.end` → `period.start` |
+| `Procedure` | `performedDateTime` → `performedPeriod.end` → `performedPeriod.start` |
+| `Immunization` | `occurrenceDateTime` |
+| `MedicationAdministration` | `effectiveDateTime` → `effectivePeriod.end` → `effectivePeriod.start` |
+| `Condition` | `onsetDateTime` → `onsetPeriod.start` → `recordedDate` |
+| `ServiceRequest` | `occurrenceDateTime` → `occurrencePeriod.end` → `authoredOn` |
+| `DiagnosticReport` | `effectiveDateTime` → `effectivePeriod.end` → `issued` |
+
+Dates are parsed leniently via HAPI FHIR's `DateTimeType`, which handles partial precision (`2026`, `2026-03`, `2026-03-15`) as well as full timestamps with offsets. Values are normalized to UTC.
+
+**Metrics** (Micrometer counters):
+- `cce.clinical_time.unmapped{resourceType}` — resource type has no candidate mapping.
+- `cce.clinical_time.unparseable{resourceType}` — a candidate field was present but could not be parsed.
+
+> **Note:** `event_time` is a persistence-only column on `inbound_event_log`. It is **not** added to the Kafka message (§4) — downstream consumers derive clinical time from the FHIR `data` payload themselves.
+
+---
+
+## 9. Migrations
 
 | Version | File | Description |
 |---------|------|-------------|
 | V1 | `V1__create_inbound_event_log.sql` | `inbound_event_log` table with dedup constraint + rejection tracking columns |
+| V2 | `V2__add_event_time_to_inbound_event_log.sql` | Adds `event_time` column (clinical occurrence time) + `idx_inbound_event_log_event_time` index |

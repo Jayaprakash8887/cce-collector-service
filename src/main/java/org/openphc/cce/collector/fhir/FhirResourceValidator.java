@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.hl7.fhir.instance.model.api.IBaseResource;
+import org.hl7.fhir.r4.model.ResourceType;
 import org.openphc.cce.collector.api.exception.PatientIdNotFoundException;
 import org.openphc.cce.collector.service.PayloadValidationResult;
 import org.springframework.stereotype.Component;
@@ -46,10 +47,10 @@ public class FhirResourceValidator {
     public PayloadValidationResult validate(JsonNode data, String subject) {
         List<String> errors = new ArrayList<>();
 
-        // Check: resourceType present and non-empty
-        String resourceType = parser.detectResourceType(data);
+        // Check: resourceType present and a recognized FHIR R4 resource type
+        ResourceType resourceType = parser.detectResourceType(data);
         if (resourceType == null) {
-            errors.add("data.resourceType is required for FHIR resources");
+            errors.add("data.resourceType is required and must be a recognized FHIR R4 resource type");
             return buildResult(errors, null);
         }
 

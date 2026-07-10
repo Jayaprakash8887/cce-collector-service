@@ -7,6 +7,7 @@ import org.hl7.fhir.instance.model.api.IBaseResource;
 import org.hl7.fhir.r4.model.Condition;
 import org.hl7.fhir.r4.model.Encounter;
 import org.hl7.fhir.r4.model.Observation;
+import org.hl7.fhir.r4.model.ResourceType;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -43,10 +44,10 @@ class FhirResourceParserTest {
     class DetectResourceType {
 
         @Test
-        @DisplayName("returns resourceType from node")
+        @DisplayName("maps a known resourceType to the ResourceType enum")
         void returnsResourceType() {
             JsonNode data = mapper.valueToTree(Map.of("resourceType", "Encounter"));
-            assertThat(parser.detectResourceType(data)).isEqualTo("Encounter");
+            assertThat(parser.detectResourceType(data)).isEqualTo(ResourceType.Encounter);
         }
 
         @Test
@@ -60,6 +61,13 @@ class FhirResourceParserTest {
         @DisplayName("returns null when value is blank")
         void returnsNullWhenBlank() {
             JsonNode data = mapper.valueToTree(Map.of("resourceType", "   "));
+            assertThat(parser.detectResourceType(data)).isNull();
+        }
+
+        @Test
+        @DisplayName("returns null for an unrecognized (non-FHIR-R4) resourceType")
+        void returnsNullForUnknownType() {
+            JsonNode data = mapper.valueToTree(Map.of("resourceType", "UnknownFooBarResource"));
             assertThat(parser.detectResourceType(data)).isNull();
         }
     }

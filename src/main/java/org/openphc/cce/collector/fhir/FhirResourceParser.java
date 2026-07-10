@@ -4,7 +4,9 @@ import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.parser.DataFormatException;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.hl7.fhir.instance.model.api.IBaseResource;
+import org.hl7.fhir.r4.model.ResourceType;
 import org.springframework.stereotype.Component;
 
 /**
@@ -14,6 +16,7 @@ import org.springframework.stereotype.Component;
  * component serializes the node to JSON text and hands it to HAPI FHIR's JSON
  * parser for structural parsing.</p>
  */
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class FhirResourceParser {
@@ -37,16 +40,24 @@ public class FhirResourceParser {
     }
 
     /**
-     * Extract the {@code resourceType} field from the data node.
+     * Detect the {@code resourceType} field and map it to the HAPI R4
+     * {@link ResourceType} enum.
      *
      * @param data the FHIR resource as a Jackson {@link JsonNode}
-     * @return the resource type string, or {@code null} if absent or blank
+     * @return the {@link ResourceType}, or {@code null} if the field is absent,
+     *         blank, or not a recognized FHIR R4 resource type
      */
-    public String detectResourceType(JsonNode data) {
+    public ResourceType detectResourceType(JsonNode data) {
         JsonNode resourceType = data.get("resourceType");
         if (resourceType == null || resourceType.isNull() || resourceType.asText().isBlank()) {
             return null;
         }
-        return resourceType.asText();
+        String resourceTypeCode = resourceType.asText();
+        try {
+            return ResourceType.fromCode(resourceTypeCode);
+        } catch (Exception e) {
+            log.debug("Unrecognized FHIR resourceType '{}'", resourceTypeCode);
+            return null;
+        }
     }
 }

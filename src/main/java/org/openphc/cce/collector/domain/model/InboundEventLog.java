@@ -70,6 +70,16 @@ public class InboundEventLog {
     @Column(name = "error_details", columnDefinition = "text")
     private String errorDetails;
 
+    /**
+     * Clinical occurrence time — when the clinical act actually happened, as
+     * extracted from the FHIR payload (e.g. {@code effectiveDateTime}). Distinct
+     * from {@code receivedAt} (ingestion time) and the CloudEvents envelope
+     * {@code time} (emitter transmission clock). Best-effort: null when it cannot
+     * be derived, in which case the caller falls back to the envelope time.
+     */
+    @Column(name = "event_time")
+    private OffsetDateTime eventTime;
+
     @Column(name = "received_at", nullable = false, updatable = false)
     @Builder.Default
     private OffsetDateTime receivedAt = OffsetDateTime.now();
