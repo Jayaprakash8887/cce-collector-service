@@ -3,6 +3,7 @@ package org.openphc.cce.collector.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.hl7.fhir.r4.model.DateTimeType;
+import org.hl7.fhir.r4.model.ResourceType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -44,23 +45,23 @@ public class ClinicalEventTimeExtractor {
      * a parseable value wins. For {@code Period} fields the bound (end/start) reflects "when it
      * finished" semantics; {@code end} is preferred, with {@code start} as a secondary candidate.
      */
-    private static final Map<String, List<TimeCandidate>> CANDIDATES = Map.of(
-            "Observation", List.of(
+    private static final Map<ResourceType, List<TimeCandidate>> CANDIDATES = Map.of(
+            ResourceType.Observation, List.of(
                     field("effectiveDateTime"), field("effectiveInstant"),
                     periodEnd("effectivePeriod"), periodStart("effectivePeriod"), field("issued")),
-            "Encounter", List.of(
+            ResourceType.Encounter, List.of(
                     periodEnd("period"), periodStart("period")),
-            "Procedure", List.of(
+            ResourceType.Procedure, List.of(
                     field("performedDateTime"), periodEnd("performedPeriod"), periodStart("performedPeriod")),
-            "Immunization", List.of(
+            ResourceType.Immunization, List.of(
                     field("occurrenceDateTime")),
-            "MedicationAdministration", List.of(
+            ResourceType.MedicationAdministration, List.of(
                     field("effectiveDateTime"), periodEnd("effectivePeriod"), periodStart("effectivePeriod")),
-            "Condition", List.of(
+            ResourceType.Condition, List.of(
                     field("onsetDateTime"), periodStart("onsetPeriod"), field("recordedDate")),
-            "ServiceRequest", List.of(
+            ResourceType.ServiceRequest, List.of(
                     field("occurrenceDateTime"), periodEnd("occurrencePeriod"), field("authoredOn")),
-            "DiagnosticReport", List.of(
+            ResourceType.DiagnosticReport, List.of(
                     field("effectiveDateTime"), periodEnd("effectivePeriod"), field("issued"))
     );
 
@@ -78,13 +79,13 @@ public class ClinicalEventTimeExtractor {
      * @return the clinical occurrence time, or {@code null} if it cannot be derived (unmapped type,
      * missing field, or unparseable value) — the caller should then fall back to the envelope time
      */
-    public OffsetDateTime extract(String resourceType, JsonNode data) {
+    public OffsetDateTime extract(ResourceType resourceType, JsonNode data) {
         if (resourceType == null || data == null || data.isNull()) {
             return null;
         }
         List<TimeCandidate> candidates = CANDIDATES.get(resourceType);
         if (candidates == null) {
-            meterRegistry.counter("cce.clinical_time.unmapped", "resourceType", resourceType).increment();
+            meterRegistry.counter("cce.clinical_time.unmapped", "resourceType", resourceType.toString()).increment();
             log.debug("No clinical-time mapping for resourceType={} — falling back to envelope time", resourceType);
             return null;
         }
@@ -103,7 +104,7 @@ public class ClinicalEventTimeExtractor {
      * ({@code 2026}, {@code 2026-03}, {@code 2026-03-15}) as well as full timestamps with offsets.
      * Returns {@code null} (and meters) for unparseable values rather than throwing.
      */
-    private OffsetDateTime parseFhirDate(String resourceType, String raw) {
+    private OffsetDateTime parseFhirDate(ResourceType resourceType, String raw) {
         if (raw == null || raw.isBlank()) {
             return null;
         }
@@ -111,7 +112,7 @@ public class ClinicalEventTimeExtractor {
             Date value = new DateTimeType(raw).getValue();
             return value == null ? null : value.toInstant().atOffset(ZoneOffset.UTC);
         } catch (Exception e) {
-            meterRegistry.counter("cce.clinical_time.unparseable", "resourceType", resourceType).increment();
+            meterRegistry.counter("cce.clinical_time.unparseable", "resourceType", resourceType.toString()).increment();
             log.warn("Unparseable clinical date '{}' on resourceType={} — falling back", raw, resourceType);
             return null;
         }

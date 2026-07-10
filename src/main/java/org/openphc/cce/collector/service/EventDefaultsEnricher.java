@@ -3,6 +3,7 @@ package org.openphc.cce.collector.service;
 import lombok.extern.slf4j.Slf4j;
 import org.openphc.cce.collector.api.dto.EventIngestionRequest;
 import org.openphc.cce.collector.domain.model.InboundEventLog;
+import org.hl7.fhir.r4.model.ResourceType;
 import org.openphc.cce.collector.fhir.FhirResourceParser;
 import org.springframework.stereotype.Service;
 
@@ -117,10 +118,28 @@ public class EventDefaultsEnricher {
      */
     private OffsetDateTime extractClinicalEventTime(EventIngestionRequest eventIngestionRequest) {
         try {
-            String fhirResourceType = fhirResourceParser.detectResourceType(eventIngestionRequest.getData());
+            ResourceType fhirResourceType = toResourceType(
+                    fhirResourceParser.detectResourceType(eventIngestionRequest.getData()));
             return clinicalEventTimeExtractor.extract(fhirResourceType, eventIngestionRequest.getData());
         } catch (Exception ex) {
             log.warn("Failed to extract clinical event time — falling back: {}", ex.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Map the payload's {@code resourceType} string to a HAPI {@link ResourceType} enum,
+     * returning {@code null} for an absent, blank, or unrecognized (non-FHIR-R4) value so the
+     * extractor treats it as an unmapped type and the caller falls back to the envelope time.
+     */
+    private ResourceType toResourceType(String resourceType) {
+        if (isBlank(resourceType)) {
+            return null;
+        }
+        try {
+            return ResourceType.fromCode(resourceType);
+        } catch (Exception ex) {
+            log.debug("Unrecognized FHIR resourceType '{}' — no clinical-time extraction", resourceType);
             return null;
         }
     }
