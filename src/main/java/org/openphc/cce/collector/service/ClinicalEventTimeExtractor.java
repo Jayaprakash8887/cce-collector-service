@@ -1,4 +1,4 @@
-package org.openphc.cce.collector.service;
+package org.openphc.cce.compliance.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -18,11 +18,11 @@ import java.util.function.Function;
 /**
  * Extracts the <em>clinical occurrence time</em> from a FHIR resource payload — i.e. when the
  * clinical act actually happened, as opposed to the CloudEvent envelope {@code time} (which
- * carries the emitter-adaptor's transmission clock) or the moment the event was ingested.
+ * carries the emitter-adaptor's transmission clock) or the moment Compliance processed the event.
  *
- * <p>Used to populate {@code inbound_event_log.event_time} with real-world clinical time, so
- * ingestion lag (offline sync, batch upload, retries, DLQ replay) does not shift downstream
- * schedules or deviation timing in the Compliance service.
+ * <p>Used to base a completed step's {@code completedAt} — and therefore the due/overdue/missed
+ * dates of dependent steps — on real-world clinical time, so ingestion lag (offline sync, batch
+ * upload, retries, DLQ replay) does not shift downstream schedules or deviation timing.
  *
  * <p>FHIR has no single "when did this happen" field: each resource type carries its own, and most
  * are polymorphic choice types ({@code effective[x]}, {@code performed[x]}, {@code occurrence[x]}).
@@ -32,8 +32,7 @@ import java.util.function.Function;
  *
  * <p>The extractor is intentionally best-effort: an unmapped resource type, a missing field, or an
  * unparseable value returns {@code null}, and the caller falls back to the envelope time. This means
- * populating {@code event_time} can only ever <em>improve</em> accuracy where a clinical field is
- * present, never regress.
+ * the change can only ever <em>improve</em> accuracy where a clinical field is present, never regress.
  */
 @Component
 public class ClinicalEventTimeExtractor {
@@ -45,24 +44,32 @@ public class ClinicalEventTimeExtractor {
      * a parseable value wins. For {@code Period} fields the bound (end/start) reflects "when it
      * finished" semantics; {@code end} is preferred, with {@code start} as a secondary candidate.
      */
-    private static final Map<ResourceType, List<TimeCandidate>> CANDIDATES = Map.of(
-            ResourceType.Observation, List.of(
+    private static final Map<ResourceType, List<TimeCandidate>> CANDIDATES = Map.ofEntries(
+            Map.entry(ResourceType.Observation, List.of(
                     field("effectiveDateTime"), field("effectiveInstant"),
-                    periodEnd("effectivePeriod"), periodStart("effectivePeriod"), field("issued")),
-            ResourceType.Encounter, List.of(
-                    periodEnd("period"), periodStart("period")),
-            ResourceType.Procedure, List.of(
-                    field("performedDateTime"), periodEnd("performedPeriod"), periodStart("performedPeriod")),
-            ResourceType.Immunization, List.of(
-                    field("occurrenceDateTime")),
-            ResourceType.MedicationAdministration, List.of(
-                    field("effectiveDateTime"), periodEnd("effectivePeriod"), periodStart("effectivePeriod")),
-            ResourceType.Condition, List.of(
-                    field("onsetDateTime"), periodStart("onsetPeriod"), field("recordedDate")),
-            ResourceType.ServiceRequest, List.of(
-                    field("occurrenceDateTime"), periodEnd("occurrencePeriod"), field("authoredOn")),
-            ResourceType.DiagnosticReport, List.of(
-                    field("effectiveDateTime"), periodEnd("effectivePeriod"), field("issued"))
+                    periodEnd("effectivePeriod"), periodStart("effectivePeriod"), field("issued"))),
+            Map.entry(ResourceType.Encounter, List.of(
+                    periodEnd("period"), periodStart("period"))),
+            Map.entry(ResourceType.Procedure, List.of(
+                    field("performedDateTime"), periodEnd("performedPeriod"), periodStart("performedPeriod"))),
+            Map.entry(ResourceType.Immunization, List.of(
+                    field("occurrenceDateTime"))),
+            Map.entry(ResourceType.MedicationAdministration, List.of(
+                    field("effectiveDateTime"), periodEnd("effectivePeriod"), periodStart("effectivePeriod"))),
+            Map.entry(ResourceType.MedicationDispense, List.of(
+                    field("whenHandedOver"), field("whenPrepared"))),
+            Map.entry(ResourceType.MedicationRequest, List.of(
+                    field("authoredOn"))),
+            Map.entry(ResourceType.Condition, List.of(
+                    field("onsetDateTime"), periodStart("onsetPeriod"), field("recordedDate"))),
+            Map.entry(ResourceType.AllergyIntolerance, List.of(
+                    field("onsetDateTime"), field("recordedDate"), field("lastOccurrence"))),
+            Map.entry(ResourceType.ServiceRequest, List.of(
+                    field("occurrenceDateTime"), periodEnd("occurrencePeriod"), field("authoredOn"))),
+            Map.entry(ResourceType.Consent, List.of(
+                    field("dateTime"))),
+            Map.entry(ResourceType.DiagnosticReport, List.of(
+                    field("effectiveDateTime"), periodEnd("effectivePeriod"), field("issued")))
     );
 
     private final MeterRegistry meterRegistry;
