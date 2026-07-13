@@ -1,4 +1,4 @@
-package org.openphc.cce.compliance.service;
+package org.openphc.cce.collector.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import io.micrometer.core.instrument.MeterRegistry;
