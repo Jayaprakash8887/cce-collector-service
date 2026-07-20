@@ -187,9 +187,9 @@ class EventDefaultsEnricherTest {
 
             enricher.enrich(request, entity);
 
-            // Encounter prefers period.end
+            // Encounter prefers period.start
             assertThat(entity.getEventTime())
-                    .isEqualTo(OffsetDateTime.parse("2026-03-01T09:30:00Z"));
+                    .isEqualTo(OffsetDateTime.parse("2026-03-01T08:00:00Z"));
         }
 
         @Test
