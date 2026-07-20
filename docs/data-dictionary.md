@@ -207,14 +207,16 @@ FHIR has no single "when did this happen" field; each resource type carries its 
 
 | FHIR Resource Type | Candidate fields (in priority order) |
 |--------------------|--------------------------------------|
-| `Observation` | `effectiveDateTime` → `effectiveInstant` → `effectivePeriod.end` → `effectivePeriod.start` → `issued` |
-| `Encounter` | `period.end` → `period.start` |
-| `Procedure` | `performedDateTime` → `performedPeriod.end` → `performedPeriod.start` |
+| `Observation` | `effectiveDateTime` → `effectiveInstant` → `effectivePeriod.start` → `issued` → `effectivePeriod.end` |
+| `Encounter` | `period.start` → `period.end` |
+| `Procedure` | `performedDateTime` → `performedPeriod.start` → `performedPeriod.end` |
 | `Immunization` | `occurrenceDateTime` |
-| `MedicationAdministration` | `effectiveDateTime` → `effectivePeriod.end` → `effectivePeriod.start` |
+| `MedicationAdministration` | `effectiveDateTime` → `effectivePeriod.start` → `effectivePeriod.end` |
 | `Condition` | `onsetDateTime` → `onsetPeriod.start` → `recordedDate` |
-| `ServiceRequest` | `occurrenceDateTime` → `occurrencePeriod.end` → `authoredOn` |
-| `DiagnosticReport` | `effectiveDateTime` → `effectivePeriod.end` → `issued` |
+| `ServiceRequest` | `occurrenceDateTime` → `authoredOn` → `occurrencePeriod.end` |
+| `DiagnosticReport` | `effectiveDateTime` → `issued` → `effectivePeriod.end` |
+
+A `Period`'s `end` bound is always the last-resort candidate in each row above — it reflects "when it finished," not when the clinical act occurred, so every other field (including that same Period's `start`, where present) is tried first.
 
 Dates are parsed leniently via HAPI FHIR's `DateTimeType`, which handles partial precision (`2026`, `2026-03`, `2026-03-15`) as well as full timestamps with offsets. Values are normalized to UTC.
 
