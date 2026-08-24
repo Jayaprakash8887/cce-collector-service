@@ -2,8 +2,10 @@ name: SonarQube
 
 on:
   push:
+    # Pattern, not a fixed list: release-1.0.0, release-2.0.0 and any future
+    # release line are covered without editing this file. Case-sensitive.
     branches:
-      - release-1.0.0
+      - 'release-*'
   # NOTE: PRs opened from a fork do not receive repository/org secrets, so
   # SONAR_TOKEN is empty there. Those runs still build and produce coverage,
   # but skip the Sonar upload (see the guarded steps below); analysis lands on
@@ -42,9 +44,26 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle') }}
           restore-keys: ${{ runner.os }}-gradle
 
+      # The scanner does NOT infer the branch from the CI environment, so it must
+      # be passed explicitly. Without this every branch uploads as the project's
+      # main branch and overwrites the previous line's results.
       - name: Build and analyze
         if: env.SONAR_TOKEN != ''
-        run: ./gradlew build jacocoTestReport sonar --info
+        env:
+          EVENT: ${{ github.event_name }}
+          BRANCH: ${{ github.ref_name }}
+          PR_KEY: ${{ github.event.number }}
+          PR_BRANCH: ${{ github.head_ref }}
+          PR_BASE: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT" = "pull_request" ]; then
+            set -- -Dsonar.pullrequest.key="$PR_KEY" \
+                   -Dsonar.pullrequest.branch="$PR_BRANCH" \
+                   -Dsonar.pullrequest.base="$PR_BASE"
+          else
+            set -- -Dsonar.branch.name="$BRANCH"
+          fi
+          ./gradlew build jacocoTestReport sonar --info "$@"
 
       # Fork PRs get no secrets: still build and run tests so the check is
       # meaningful, but do not attempt an unauthenticated Sonar upload.
