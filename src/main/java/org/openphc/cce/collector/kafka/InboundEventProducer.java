@@ -5,7 +5,8 @@ import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.openphc.cce.collector.api.dto.EventIngestionRequest;
 import org.openphc.cce.collector.api.exception.KafkaPublishException;
-import org.openphc.cce.collector.config.KafkaTopicProperties;
+import org.openphc.cce.collector.config.KafkaPublishProperties;
+import org.openphc.cce.common.kafka.KafkaTopicProperties;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Component;
@@ -35,14 +36,17 @@ public class InboundEventProducer {
 
     private final KafkaTemplate<String, EventIngestionRequest> kafkaTemplate;
     private final KafkaTopicProperties kafkaTopicProperties;
+    private final KafkaPublishProperties publishProperties;
     private final Counter publishSuccessCounter;
     private final Counter publishFailureCounter;
 
     public InboundEventProducer(KafkaTemplate<String, EventIngestionRequest> kafkaTemplate,
                                 KafkaTopicProperties kafkaTopicProperties,
+                                KafkaPublishProperties publishProperties,
                                 MeterRegistry meterRegistry) {
         this.kafkaTemplate = kafkaTemplate;
         this.kafkaTopicProperties = kafkaTopicProperties;
+        this.publishProperties = publishProperties;
         this.publishSuccessCounter = Counter.builder("cce.collector.kafka.publish.success")
                 .description("Successful Kafka publishes")
                 .register(meterRegistry);
@@ -62,9 +66,9 @@ public class InboundEventProducer {
      * @throws KafkaPublishException if the send fails or times out
      */
     public void publish(EventIngestionRequest request) {
-        String topic = kafkaTopicProperties.getTopics().getInbound();
+        String topic = kafkaTopicProperties.getInboundEvents();
         String key = request.getSubject();
-        int timeoutSeconds = kafkaTopicProperties.getPublishTimeoutSeconds();
+        int timeoutSeconds = publishProperties.getPublishTimeoutSeconds();
 
         log.debug("Publishing event to Kafka: topic={}, key={}, cloudeventsId={}",
                 topic, key, request.getId());

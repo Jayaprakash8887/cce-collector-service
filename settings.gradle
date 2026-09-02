@@ -1,1 +1,6 @@
 rootProject.name = 'cce-collector-service'
+
+// Shared FHIR context, clinical-time extraction and Kafka topic contract. A composite build rather
+// than a published artifact, matching the other CCE services: the repos sit side by side, so a change
+// in common-util is picked up on the next build with no publish step and no version bump.
+includeBuild '../cce-common-util'

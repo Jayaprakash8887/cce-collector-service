@@ -80,9 +80,11 @@ It receives clinical events from external EHR/RHIE systems (via openHIM mediator
 org.openphc.cce.collector/
 ├── CollectorServiceApplication.java       # Spring Boot entry point
 ├── config/                                # Spring configuration beans
-│   ├── KafkaTopicProperties.java          #   @ConfigurationProperties for cce.kafka.* topic names, publish timeout & topic creation config
+│   ├── KafkaPublishProperties.java        #   @ConfigurationProperties for cce.kafka.* publish timeout
+│   │                                      #   & topic creation config (the topic name is shared)
 │   ├── KafkaTopicConfig.java              #   Declares NewTopic bean for auto-creation on startup
-│   ├── FhirConfig.java                    #   FhirContext.forR4() singleton bean
+│   ├── CommonUtilConfig.java              #   Imports FhirConfig, ClinicalEventTimeExtractor,
+│   │                                      #   KafkaTopicProperties from cce-common-util
 │   ├── JpaConfig.java                     #   Enables JPA repositories & transactions
 │   ├── SecurityConfig.java                #   Stateless security, CSRF disabled
 │   ├── WebConfig.java                     #   CORS configuration
@@ -101,7 +103,6 @@ org.openphc.cce.collector/
 │   ├── CloudEventValidator.java           #   CloudEvents v1.0 envelope validation
 │   ├── PayloadValidator.java              #   Payload validation: branches on datacontenttype (FHIR / JSON / unsupported)
 │   ├── EventDefaultsEnricher.java         #   Generates correlationId if absent, fills time if absent, derives event_time
-│   ├── ClinicalEventTimeExtractor.java    #   Extracts clinical occurrence time from FHIR payload (for event_time)
 │   ├── EventPublisher.java                #   Publishes enriched EventIngestionRequest to Kafka
 │   ├── DeduplicationService.java          #   DB dedup with configurable lookback window
 │   └── RejectionService.java              #   Updates inbound_event_log with rejection details
@@ -156,7 +157,7 @@ src/main/resources/
     a. Generate correlationid if absent (UUID with "corr-" prefix)
     b. Fill time with server received_at if absent
     c. Derive event_time (clinical occurrence time) from FHIR payload via
-       ClinicalEventTimeExtractor; fall back to envelope time, then received_at
+       ClinicalEventTimeExtractor (cce-common-util); fall back to envelope time, then received_at
  7. Payload Validation
     a. If datacontenttype = application/fhir+json:
        i.   Parse data via HAPI FHIR
@@ -247,7 +248,7 @@ All producer settings are env-var-configurable via `application.yml` (see Deploy
 
 ### Topic Auto-Creation
 
-`KafkaTopicConfig` declares a `NewTopic` bean that creates the inbound topic on startup (if it doesn't already exist). Configuration is managed via `KafkaTopicProperties.TopicConfig` (`cce.kafka.topic-config.*`):
+`KafkaTopicConfig` declares a `NewTopic` bean that creates the inbound topic on startup (if it doesn't already exist), under the name cce-common-util's `KafkaTopicProperties` supplies (`cce.kafka.topics.inbound-events`). The creation settings are local, in `KafkaPublishProperties.TopicConfig` (`cce.kafka.topic-config.*`) — no other service creates this topic:
 
 | Setting | Default | Env Var | Production Override |
 |---------|---------|---------|--------------------|

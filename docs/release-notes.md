@@ -2,7 +2,35 @@
 
 ---
 
-## Unreleased — Clinical Event Time (`event_time`)
+## Unreleased — 2.0.0: adopting cce-common-util
+
+**Branch:** `release-2.0.0`
+
+This service now builds on the shared library, like the other four CCE services. Three things it had
+grown its own copies of come from cce-common-util instead:
+
+- **`FhirConfig`** — was identical to the library's, bean for bean.
+- **`ClinicalEventTimeExtractor`** — the copies were reconciled by hand earlier on this branch, after
+  the Matcher Service and this service were found to disagree about whether an `Encounter` occurred at
+  `period.start` or `period.end`. Since this service stamps `event_time` and the matcher derives
+  `completed_at` — and so an SLA verdict — from the same payload, the audit trail could not be used to
+  explain the SLA clock. Sharing one class is what keeps them reconciled. No behaviour change: the
+  candidate table is the one already on this branch. The two `cce.clinical_time.*` counters now carry
+  Micrometer descriptions, which surface as HELP text in the Prometheus scrape.
+- **`KafkaTopicProperties`** — named the topic under `cce.kafka.topics.inbound` while the matcher read
+  `cce.kafka.topics.inbound-events`. One topic, two spellings, and a deployment had to set both.
+  **Config change:** `cce.kafka.topics.inbound` → `cce.kafka.topics.inbound-events`, and
+  `CCE_COLLECTOR_KAFKA_TOPICS_INBOUND` → `CCE_KAFKA_TOPICS_INBOUND_EVENTS`. The publish timeout and
+  topic-creation settings stay local, in `KafkaPublishProperties` — no other service creates this topic.
+
+The library is imported bean by bean in `CommonUtilConfig` rather than by widening `scanBasePackages`:
+this service owns one table and has no business holding the runtime plane's entities and repositories.
+The imports sit in a scanned `@Configuration` rather than on the application class, because an
+`@Import` there is honoured by `@DataJpaTest` too, which would then have to supply a `MeterRegistry`.
+
+---
+
+## 1.0.0 — Clinical Event Time (`event_time`)
 
 **Branch:** `release-1.0.0`
 

@@ -61,16 +61,19 @@ spring:
 
 ### Topic Configuration
 
-Topic names and publish timeout are managed via `KafkaTopicProperties` (`@ConfigurationProperties(prefix = "cce.kafka")`):
+The topic **name** comes from cce-common-util's `KafkaTopicProperties`
+(`@ConfigurationProperties(prefix = "cce.kafka.topics")`) — the same property the Matcher Service reads,
+so producer and consumer cannot end up on different spellings of one topic. The publish timeout is this
+service's own, in `KafkaPublishProperties` (`prefix = "cce.kafka"`):
 
 | Property | Default | Env Var |
 |----------|---------|--------|
-| `cce.kafka.topics.inbound` | `cce.events.inbound` | `CCE_COLLECTOR_KAFKA_TOPICS_INBOUND` |
+| `cce.kafka.topics.inbound-events` | `cce.events.inbound` | `CCE_KAFKA_TOPICS_INBOUND_EVENTS` |
 | `cce.kafka.publish-timeout-seconds` | `30` | `CCE_COLLECTOR_KAFKA_PUBLISH_TIMEOUT_SECONDS` |
 
 ### Topic Creation Configuration
 
-Topic creation settings are managed via `KafkaTopicProperties.TopicConfig` (`cce.kafka.topic-config.*`). The `KafkaTopicConfig` class declares a `NewTopic` bean that creates the topic on startup if it doesn't exist.
+Topic creation settings are managed via `KafkaPublishProperties.TopicConfig` (`cce.kafka.topic-config.*`) — local to this service, as no other service creates this topic. The `KafkaTopicConfig` class declares a `NewTopic` bean that creates the topic on startup if it doesn't exist, under the name the shared properties supply.
 
 | Property | Default | Env Var | Production Override |
 |----------|---------|--------|--------------------|

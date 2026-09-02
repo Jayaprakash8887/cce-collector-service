@@ -15,7 +15,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.openphc.cce.collector.api.dto.EventIngestionRequest;
 import org.openphc.cce.collector.api.exception.KafkaPublishException;
-import org.openphc.cce.collector.config.KafkaTopicProperties;
+import org.openphc.cce.collector.config.KafkaPublishProperties;
+import org.openphc.cce.common.kafka.KafkaTopicProperties;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 
@@ -51,14 +52,16 @@ class InboundEventProducerTest {
     private KafkaTemplate<String, EventIngestionRequest> kafkaTemplate;
 
     private KafkaTopicProperties kafkaTopicProperties;
+    private KafkaPublishProperties publishProperties;
     private InboundEventProducer producer;
 
     @BeforeEach
     void setUp() {
         kafkaTopicProperties = new KafkaTopicProperties();
-        kafkaTopicProperties.getTopics().setInbound(TOPIC);
-        kafkaTopicProperties.setPublishTimeoutSeconds(TIMEOUT_SECONDS);
-        producer = new InboundEventProducer(kafkaTemplate, kafkaTopicProperties,
+        kafkaTopicProperties.setInboundEvents(TOPIC);
+        publishProperties = new KafkaPublishProperties();
+        publishProperties.setPublishTimeoutSeconds(TIMEOUT_SECONDS);
+        producer = new InboundEventProducer(kafkaTemplate, kafkaTopicProperties, publishProperties,
                 new SimpleMeterRegistry());
     }
 
@@ -156,9 +159,9 @@ class InboundEventProducerTest {
         }
 
         @Test
-        @DisplayName("reads topic name from KafkaTopicProperties")
+        @DisplayName("reads the topic name from the shared KafkaTopicProperties")
         void readsTopicFromProperties() {
-            kafkaTopicProperties.getTopics().setInbound("custom.topic.name");
+            kafkaTopicProperties.setInboundEvents("custom.topic.name");
             EventIngestionRequest request = buildRequest();
             when(kafkaTemplate.send(eq("custom.topic.name"), anyString(), any()))
                     .thenReturn(successFuture());
@@ -200,7 +203,7 @@ class InboundEventProducerTest {
                     .thenReturn(neverComplete);
 
             // Use a very short timeout to avoid slow tests
-            kafkaTopicProperties.setPublishTimeoutSeconds(1);
+            publishProperties.setPublishTimeoutSeconds(1);
 
             assertThatThrownBy(() -> producer.publish(request))
                     .isInstanceOf(KafkaPublishException.class)
@@ -248,7 +251,7 @@ class InboundEventProducerTest {
         @Test
         @DisplayName("uses configurable publish timeout")
         void usesConfigurableTimeout() {
-            kafkaTopicProperties.setPublishTimeoutSeconds(5);
+            publishProperties.setPublishTimeoutSeconds(5);
             EventIngestionRequest request = buildRequest();
 
             CompletableFuture<SendResult<String, EventIngestionRequest>> neverComplete =

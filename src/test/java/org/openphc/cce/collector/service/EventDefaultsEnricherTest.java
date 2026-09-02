@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.openphc.cce.collector.api.dto.EventIngestionRequest;
 import org.openphc.cce.collector.domain.model.InboundEventLog;
 import org.openphc.cce.collector.fhir.FhirResourceParser;
+import org.openphc.cce.common.fhir.ClinicalEventTimeExtractor;
 
 import java.time.OffsetDateTime;
 import java.util.Map;

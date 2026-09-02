@@ -203,7 +203,16 @@ The `event_time` column captures the **clinical occurrence time** — when the c
 
 Extraction is **best-effort**: an unmapped resource type, a missing field, or an unparseable value yields `null` and the fallback chain takes over — so populating `event_time` can only ever *improve* accuracy where a clinical field is present, never regress or fail ingestion.
 
-FHIR has no single "when did this happen" field; each resource type carries its own, and most are polymorphic choice types (`effective[x]`, `performed[x]`, `occurrence[x]`). The extractor probes an ordered list of concrete JSON fields per resource type and takes the first that parses. For `Period` fields, `end` ("when it finished") is preferred over `start`.
+FHIR has no single "when did this happen" field; each resource type carries its own, and most are polymorphic choice types (`effective[x]`, `performed[x]`, `occurrence[x]`). The extractor probes an ordered list of concrete JSON fields per resource type and takes the first that parses. A `Period`'s `end` says when the encounter *finished* rather than when the clinical act occurred, so it is the **last resort** in each list — tried only after every other field, including that same Period's `start`.
+
+The mapping is `ClinicalEventTimeExtractor` in
+[cce-common-util](../../cce-common-util/src/main/java/org/openphc/cce/common/fhir/ClinicalEventTimeExtractor.java),
+shared with the Matcher Service. That matters more than it looks: this service stamps `event_time` from
+it, and the Matcher Service derives a completed step's `completed_at` — and so its SLA verdict — from
+the same reading of the same payload. The two services held separate copies until 2.0.0, and they had
+drifted: an `Encounter` carrying both bounds was recorded here at `period.end` and judged there at
+`period.start`, so the audit trail and the SLA clock disagreed about when the visit happened. The
+candidate order below is the reconciled one; sharing the class is what stops it drifting again.
 
 | FHIR Resource Type | Candidate fields (in priority order) |
 |--------------------|--------------------------------------|
