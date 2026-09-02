@@ -56,6 +56,7 @@ The **Collector Service** is the event ingestion gateway of the Care Coordinatio
 | Database | PostgreSQL | 16+ |
 | Message broker | Apache Kafka | 3.7+ (KRaft mode) |
 | FHIR library | HAPI FHIR | 7.4.0 |
+| Shared library | `cce-common-util` | 2.0.0 (sibling checkout, `includeBuild`) |
 | Metrics | Micrometer + Prometheus | — |
 | Logging | Logback + LogstashEncoder | JSON in production |
 
@@ -64,6 +65,21 @@ The **Collector Service** is the event ingestion gateway of the Care Coordinatio
 - **Java 21** (Eclipse Temurin recommended)
 - **Docker** and **Docker Compose** (for local infrastructure)
 - **Gradle 8.x** (wrapper included — no global install needed)
+- **`cce-common-util`** checked out as a sibling directory — wired in via `includeBuild`, so there is
+  nothing to publish or install; a change there is picked up on the next build
+
+### What comes from cce-common-util
+
+This service takes three things from the shared library, imported by name in `CommonUtilConfig`:
+
+| From the library | Why it is not local |
+|---|---|
+| `FhirConfig` | The `FhirContext` is expensive to build and thread-safe once built, and every CCE service has to parse against the same R4 context |
+| `ClinicalEventTimeExtractor` | The clinical time stamped on `inbound_event_log.event_time` is the same reading the Matcher Service later judges an SLA against. Held separately, the two drifted once already — an `Encounter` with both bounds was recorded here at `period.end` and judged there at `period.start` — and were reconciled by hand; sharing the class is what stops that recurring |
+| `KafkaTopicProperties` | Names the topic this service produces to and the Matcher Service consumes from, so the two cannot end up on different spellings of one topic |
+
+Imported by name rather than by scanning the whole library: this service owns one table and has no
+business reaching for the runtime plane's entities and repositories.
 
 ## Quick Start
 
@@ -281,7 +297,7 @@ SELECT * FROM inbound_event_log WHERE id = '<uuid>';
 | `cce.collector.dedup.lookback-days` | `30` | Deduplication lookback window (days) |
 | `cce.collector.max-payload-size` | `1048576` | Max payload size in bytes (1 MB) |
 | `cce.collector.fhir.strict-validation` | `false` | FHIR strict validation mode |
-| `cce.kafka.topics.inbound` | `cce.events.inbound` | Kafka inbound topic name |
+| `cce.kafka.topics.inbound-events` | `cce.events.inbound` | Kafka inbound topic name — bound by cce-common-util's `KafkaTopicProperties`, the same key the Matcher Service reads |
 | `cce.kafka.publish-timeout-seconds` | `30` | Kafka synchronous publish timeout |
 | `cce.kafka.topic-config.partitions` | `25` | Inbound topic partition count |
 | `cce.kafka.topic-config.replication-factor` | `1` | Inbound topic replication factor |

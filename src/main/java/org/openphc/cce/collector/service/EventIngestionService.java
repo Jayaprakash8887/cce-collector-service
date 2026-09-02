@@ -10,7 +10,7 @@ import org.openphc.cce.collector.api.exception.CloudEventValidationException;
 import org.openphc.cce.collector.api.exception.DuplicateEventException;
 import org.openphc.cce.collector.api.exception.KafkaPublishException;
 import org.openphc.cce.collector.api.exception.PayloadValidationException;
-import org.openphc.cce.collector.config.KafkaTopicProperties;
+import org.openphc.cce.common.kafka.KafkaTopicProperties;
 import org.openphc.cce.collector.domain.model.InboundEventLog;
 import org.openphc.cce.collector.domain.model.enums.InboundStatus;
 import org.openphc.cce.collector.domain.model.enums.RejectionReason;
@@ -186,7 +186,7 @@ public class EventIngestionService {
                 rejectionService.recordRejection(inbound, RejectionReason.KAFKA_PUBLISH_FAILURE,
                         ex.getMessage());
                 throw new KafkaPublishException(
-                        kafkaTopicProperties.getTopics().getInbound(), ex);
+                        kafkaTopicProperties.getInboundEvents(), ex);
             }
         } catch (PayloadValidationException ex) {
             // Already handled above — rethrow as-is

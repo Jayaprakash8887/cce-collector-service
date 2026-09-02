@@ -95,7 +95,9 @@ cce:
       patient-identifier-system: ${CCE_COLLECTOR_FHIR_PATIENT_IDENTIFIER_SYSTEM:http://openphc.org/identifier/upid}
   kafka:
     topics:
-      inbound: ${CCE_COLLECTOR_KAFKA_TOPICS_INBOUND:cce.events.inbound}
+      # Bound by cce-common-util's KafkaTopicProperties — the same key the Matcher Service reads to
+      # find the topic it consumes from.
+      inbound-events: ${CCE_KAFKA_TOPICS_INBOUND_EVENTS:cce.events.inbound}
     publish-timeout-seconds: ${CCE_COLLECTOR_KAFKA_PUBLISH_TIMEOUT_SECONDS:30}
     topic-config:
       partitions: ${CCE_COLLECTOR_KAFKA_TOPIC_PARTITIONS:25}

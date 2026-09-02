@@ -140,7 +140,7 @@ All configuration can be overridden via environment variables using Spring Boot'
 | `CCE_COLLECTOR_FHIR_PATIENT_IDENTIFIER_SYSTEM` | `http://openphc.org/identifier/upid` | System URI for extracting UPID from Patient.identifier[] |
 | `CCE_COLLECTOR_DEDUP_LOOKBACK_DAYS` | `30` | Dedup lookback window (days) |
 | `CCE_COLLECTOR_MAX_PAYLOAD_SIZE` | `1048576` | Max event payload size (bytes, ~1 MB) |
-| `CCE_COLLECTOR_KAFKA_TOPICS_INBOUND` | `cce.events.inbound` | Inbound events topic |
+| `CCE_KAFKA_TOPICS_INBOUND_EVENTS` | `cce.events.inbound` | Inbound events topic. Not `CCE_COLLECTOR_`-prefixed: the name is bound by cce-common-util's `KafkaTopicProperties`, the same property the Matcher Service reads to find the topic it consumes from |
 | `CCE_COLLECTOR_KAFKA_PUBLISH_TIMEOUT_SECONDS` | `30` | Synchronous Kafka publish timeout (seconds) |
 | `CCE_COLLECTOR_KAFKA_TOPIC_PARTITIONS` | `25` | Inbound topic partition count |
 | `CCE_COLLECTOR_KAFKA_TOPIC_REPLICATION_FACTOR` | `1` | Inbound topic replication factor |
